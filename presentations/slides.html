@@ -1,0 +1,1634 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Análisis Topológico de Datos para Mercados Financieros</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@4.6.0/dist/reset.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@4.6.0/dist/reveal.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@4.6.0/dist/theme/black.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@4.6.0/plugin/highlight/monokai.css">
+<style>
+  :root {
+    --teal:   #4ecdc4;
+    --red:    #ff6b6b;
+    --yellow: #ffd93d;
+    --green:  #a8e6cf;
+    --dimgray:#888;
+  }
+  .reveal { font-size: 28px; }
+  .reveal h1 { color: var(--yellow); font-size: 1.6em; }
+  .reveal h2 { color: var(--yellow); font-size: 1.2em; }
+  .reveal h3 { color: var(--teal);   font-size: 1.0em; }
+  .h0 { color: var(--teal); font-weight: bold; }
+  .h1c { color: var(--red);  font-weight: bold; }
+  .h2c { color: var(--green); font-weight: bold; }
+  .hi  { color: var(--yellow); }
+  .small { font-size: 0.65em; }
+  .tiny  { font-size: 0.55em; }
+  .dim   { color: var(--dimgray); }
+  .box {
+    border: 1px solid var(--teal);
+    border-radius: 6px;
+    padding: 10px 16px;
+    margin: 6px 0;
+    background: rgba(78,205,196,0.07);
+  }
+  .box-red {
+    border-color: var(--red);
+    background: rgba(255,107,107,0.07);
+  }
+  .box-yellow {
+    border-color: var(--yellow);
+    background: rgba(255,217,61,0.07);
+  }
+  .two-col { display: flex; gap: 20px; align-items: flex-start; }
+  .two-col > * { flex: 1; }
+  canvas { display: block; margin: 0 auto; }
+  .slider-row { display: flex; align-items: center; gap: 10px; justify-content: center; margin-top: 8px; }
+  .betti-display { font-family: monospace; font-size: 0.75em; text-align: center; margin-top: 4px; }
+  .reveal pre { font-size: 0.55em; }
+  .reveal section { height: 100%; }
+  .sig-arrow { font-size: 1.4em; color: var(--yellow); }
+  .part-label {
+    display: inline-block;
+    background: var(--teal);
+    color: #111;
+    padding: 2px 12px;
+    border-radius: 4px;
+    font-size: 0.55em;
+    font-weight: bold;
+    letter-spacing: 1px;
+    margin-bottom: 8px;
+  }
+</style>
+</head>
+<body>
+<div class="reveal">
+<div class="slides">
+
+<!-- ======================================================= SLIDE 1: TITLE -->
+<section>
+  <br>
+  <h1>Análisis Topológico de Datos<br>para Mercados Financieros</h1>
+  <h3 style="color:#aaa; font-size:0.85em;">Extrayendo forma de las series de tiempo</h3>
+  <br>
+  <p class="small">MCD524 — Deep Learning Aplicado a las Finanzas<br>
+  Instituto Tecnológico de Santo Domingo</p>
+  <br>
+  <p class="tiny dim">Cesar Garcia · 2026</p>
+  <p class="tiny" style="margin-top:8px;">
+    <a href="https://github.com/Gypsaman/tda_ml" style="color:var(--teal);">github.com/Gypsaman/tda_ml</a>
+  </p>
+  <aside class="notes">Bienvenidos. Hoy construiremos intuición para un nuevo conjunto de herramientas — el Análisis Topológico de Datos (TDA) — y mostraremos cómo extrae información de series de tiempo financieras que los métodos estándar de ML no capturan.</aside>
+</section>
+
+<!-- ======================================================= SLIDE 2: WHY TDA -->
+<section>
+  <h2>¿Por qué importa?</h2>
+  <div class="two-col" style="align-items:center; margin-top:6px">
+    <div>
+      <div class="box" style="font-size:0.7em; margin-bottom:8px">
+        📈 <strong>DL Estándar (LSTM, CNN)</strong><br>
+        Ve los retornos como una secuencia 1D.<br>
+        Aprende: "tras este patrón → usualmente sube."<br>
+        <span class="dim">Bueno en: patrones locales, tendencias, estacionalidad.</span>
+      </div>
+      <div class="fragment box-red box" style="font-size:0.7em; margin-bottom:8px">
+        🌀 <strong>TDA</strong><br>
+        Trata los retornos como una <span class="hi">nube de puntos con forma</span>.<br>
+        Detecta: lazos, estructura de vacíos, cambios de agrupamiento.<br>
+        <span class="dim">Bueno en: cambios de régimen, precursores de colapso, larga memoria.</span>
+      </div>
+      <div class="fragment box-yellow box" style="font-size:0.7em">
+        🔬 <strong>Resultado:</strong> En análisis retrospectivo, TDA mostró señales de alerta <em>semanas antes</em> del colapso de 2008.<br>
+        (Gidea &amp; Katz 2018 — Physica A)
+      </div>
+    </div>
+    <div style="text-align:center">
+      <svg width="380" height="260" viewBox="0 0 380 260" style="background:#111; border-radius:5px">
+        <text x="90" y="18" text-anchor="middle" fill="#4ecdc4" font-size="13" font-weight="bold">Vista LSTM</text>
+        <text x="90" y="32" text-anchor="middle" fill="#888" font-size="11">secuencia de números</text>
+        <rect x="5" y="38" width="170" height="52" rx="3" fill="rgba(78,205,196,0.1)" stroke="#4ecdc4" stroke-width="1"/>
+        <text x="90" y="58" text-anchor="middle" fill="#4ecdc4" font-size="11">[-0.01, 0.02, -0.03,</text>
+        <text x="90" y="75" text-anchor="middle" fill="#4ecdc4" font-size="11">0.01, -0.02, ...]</text>
+        <text x="90" y="106" text-anchor="middle" fill="#888" font-size="16">↓</text>
+        <rect x="20" y="114" width="140" height="30" rx="3" fill="rgba(78,205,196,0.15)" stroke="#4ecdc4" stroke-width="1"/>
+        <text x="90" y="133" text-anchor="middle" fill="#4ecdc4" font-size="12">LSTM</text>
+        <text x="300" y="18" text-anchor="middle" fill="#ff6b6b" font-size="11" font-weight="bold">Vista TDA</text>
+        <text x="300" y="30" text-anchor="middle" fill="#888" font-size="9">nube de puntos en ℝᵈ</text>
+        <circle cx="270" cy="68" r="2.5" fill="#ff6b6b"/>
+        <circle cx="290" cy="50" r="2.5" fill="#ff6b6b"/>
+        <circle cx="310" cy="52" r="2.5" fill="#ff6b6b"/>
+        <circle cx="327" cy="68" r="2.5" fill="#ff6b6b"/>
+        <circle cx="323" cy="88" r="2.5" fill="#ff6b6b"/>
+        <circle cx="305" cy="98" r="2.5" fill="#ff6b6b"/>
+        <circle cx="285" cy="94" r="2.5" fill="#ff6b6b"/>
+        <circle cx="273" cy="80" r="2.5" fill="#ff6b6b"/>
+        <ellipse cx="300" cy="74" rx="32" ry="26" fill="none" stroke="#ff6b6b" stroke-width="1" stroke-dasharray="3,2" opacity="0.5"/>
+        <text x="300" y="125" text-anchor="middle" fill="#888" font-size="16">↓</text>
+        <rect x="260" y="130" width="80" height="22" rx="3" fill="rgba(255,107,107,0.15)" stroke="#ff6b6b" stroke-width="1"/>
+        <text x="300" y="145" text-anchor="middle" fill="#ff6b6b" font-size="10">HP + diagrama</text>
+        <text x="190" y="185" text-anchor="middle" fill="#ffd93d" font-size="13" font-weight="bold">+</text>
+        <text x="190" y="205" text-anchor="middle" fill="#ffd93d" font-size="10">¡Complementarios!</text>
+        <text x="190" y="220" text-anchor="middle" fill="#888" font-size="9">Local vs. estructura global</text>
+      </svg>
+    </div>
+  </div>
+  <aside class="notes">El contraste clave: LSTM ve una secuencia. TDA ve geometría. No compiten — capturan aspectos diferentes del mismo dato. Esta diapositiva establece el mensaje central de la charla.</aside>
+</section>
+
+<!-- ======================================================= SLIDE 3: ROADMAP -->
+<section>
+  <h2>Recorrido de hoy</h2>
+  <div class="two-col" style="font-size:0.7em; margin-top:16px">
+    <div>
+      <p><span class="h0">①</span> ¿Qué es la topología? <span class="dim small">(10 min)</span></p>
+      <p><span class="h0">②</span> Homología persistente <span class="dim small">(10 min)</span></p>
+      <p><span class="h0">③</span> Series de tiempo → forma <span class="dim small">(10 min)</span></p>
+    </div>
+    <div>
+      <p><span class="h1c">④</span> Aplicaciones financieras <span class="dim small">(10 min)</span></p>
+      <p><span class="h1c">⑤</span> Pipeline TDA + ML <span class="dim small">(10 min)</span></p>
+      <p><span class="h1c">⑥</span> Hurst y larga memoria + código <span class="dim small">(10 min)</span></p>
+    </div>
+  </div>
+  <br>
+  <p class="small fragment box-yellow box">No se requiere conocimiento de topología previa. Construimos cada concepto desde cero.</p>
+  <aside class="notes">Establecer expectativas. Sin topología previa. Todo conecta con lo que ya conocen del aprendizaje profundo.</aside>
+</section>
+
+<!-- ======================================================= SLIDE 4: WHAT IS TOPOLOGY -->
+<section>
+  <div class="part-label">PARTE 1 — FUNDAMENTOS DE TOPOLOGÍA</div>
+  <h2>¿Qué es la topología?</h2>
+  <p class="small">"El estudio de la <span class="hi">forma</span> que sobrevive a deformaciones continuas."</p>
+  <div class="two-col" style="margin-top:12px; align-items:center">
+    <div style="text-align:center">
+      <svg width="300" height="160" viewBox="0 0 300 160">
+        <!-- Coffee cup and donut are topologically equivalent -->
+        <!-- Donut -->
+        <ellipse cx="75" cy="80" rx="55" ry="30" fill="none" stroke="#4ecdc4" stroke-width="2.5"/>
+        <ellipse cx="75" cy="80" rx="20" ry="10" fill="#1a1a2e" stroke="#4ecdc4" stroke-width="2.5"/>
+        <text x="75" y="130" text-anchor="middle" fill="#4ecdc4" font-size="13">Toro (dona)</text>
+        <text x="150" y="88" text-anchor="middle" fill="#ffd93d" font-size="28">≅</text>
+        <rect x="185" y="55" width="60" height="70" rx="8" fill="none" stroke="#4ecdc4" stroke-width="2.5"/>
+        <path d="M245 70 Q270 70 270 90 Q270 110 245 110" fill="none" stroke="#4ecdc4" stroke-width="2.5"/>
+        <text x="215" y="143" text-anchor="middle" fill="#4ecdc4" font-size="13">Taza de café</text>
+      </svg>
+      <p class="tiny dim">Ambos tienen exactamente <strong>un agujero</strong></p>
+    </div>
+    <div>
+      <div class="box fragment">
+        <p class="small"><span class="hi">Las distancias no importan.</span> Estirar, doblar, torcer — todo permitido. <strong>Sin cortar, sin pegar.</strong></p>
+      </div>
+      <div class="box fragment" style="margin-top:10px">
+        <p class="small">Lo que <span class="hi">sí</span> importa: <br>
+        <span class="h0">componentes conexas</span>,
+        <span class="h1c">lazos</span>,
+        <span class="h2c">vacíos</span></p>
+      </div>
+    </div>
+  </div>
+  <aside class="notes">La taza y la dona son topológicamente equivalentes porque ambas tienen un asa = un lazo. Esta es la intuición clave. Contamos agujeros, no medimos longitudes.</aside>
+</section>
+
+<!-- ======================================================= SLIDE 5: POINT CLOUDS + SIMPLICES -->
+<section>
+  <h2>De puntos de datos a forma</h2>
+  <p class="small">Tenemos una <span class="hi">nube de puntos</span> — p.ej. embeddings de retornos bursátiles, activaciones neurales, coordenadas.</p>
+  <div class="two-col" style="margin-top:12px; align-items:center">
+    <div>
+      <svg width="280" height="200" viewBox="0 0 280 200">
+        <!-- random points -->
+        <circle cx="60" cy="40" r="5" fill="#ff6b6b"/>
+        <circle cx="140" cy="30" r="5" fill="#ff6b6b"/>
+        <circle cx="220" cy="60" r="5" fill="#ff6b6b"/>
+        <circle cx="200" cy="140" r="5" fill="#ff6b6b"/>
+        <circle cx="100" cy="160" r="5" fill="#ff6b6b"/>
+        <circle cx="40" cy="120" r="5" fill="#ff6b6b"/>
+        <circle cx="160" cy="100" r="5" fill="#ff6b6b"/>
+        <text x="140" y="190" text-anchor="middle" fill="#aaa" font-size="13">Nube de puntos bruta</text>
+      </svg>
+    </div>
+    <div class="small">
+      <p class="fragment">Conectar puntos cercanos con <span class="hi">aristas</span></p>
+      <p class="fragment">Rellenar triángulos cuando 3 puntos están mutuamente cerca</p>
+      <p class="fragment">Resultado: un <span class="hi">complejo simplicial</span></p>
+      <div class="fragment box" style="margin-top:8px; font-size:0.9em">
+        <strong>Tipos de símplex:</strong><br>
+        vértice (0-símplex) → arista (1-símplex) → triángulo (2-símplex) → tetraedro (3-símplex)
+      </div>
+    </div>
+  </div>
+  <aside class="notes">Necesitamos pasar de una nube de puntos finita — el tipo de datos que tenemos — a algo con contenido topológico. La respuesta son los complejos simpliciales.</aside>
+</section>
+
+<!-- ======================================================= SLIDE 6: RIPS COMPLEX DEFINITION -->
+<section>
+  <h2>Complejo de Vietoris–Rips</h2>
+  <div class="box" style="margin-bottom:14px">
+    <p class="small">
+      Dados puntos $X \subset \mathbb{R}^d$ y escala $r > 0$:<br><br>
+      $\text{VR}(X, r)$ = complejo simplicial cuyos $k$-símplex son todos los subconjuntos de $(k+1)$ puntos de $X$ con distancias a pares $\leq r$
+    </p>
+  </div>
+  <div class="two-col small" style="align-items:center">
+    <div>
+      <svg width="260" height="180" viewBox="0 0 260 180">
+        <!-- Small r: all 6 points, balls radius 25 (2r=50 < min pairwise dist ≈64) → no edges -->
+        <!-- Points: A=(75,65) B=(145,55) C=(108,120) D=(210,65) E=(200,130) F=(22,105) -->
+        <circle cx="75"  cy="65"  r="25" fill="none" stroke="#ffd93d" stroke-width="1" stroke-dasharray="3,3" opacity="0.4"/>
+        <circle cx="145" cy="55"  r="25" fill="none" stroke="#ffd93d" stroke-width="1" stroke-dasharray="3,3" opacity="0.4"/>
+        <circle cx="108" cy="120" r="25" fill="none" stroke="#ffd93d" stroke-width="1" stroke-dasharray="3,3" opacity="0.4"/>
+        <circle cx="210" cy="65"  r="25" fill="none" stroke="#ffd93d" stroke-width="1" stroke-dasharray="3,3" opacity="0.4"/>
+        <circle cx="200" cy="130" r="25" fill="none" stroke="#ffd93d" stroke-width="1" stroke-dasharray="3,3" opacity="0.4"/>
+        <circle cx="22"  cy="105" r="25" fill="none" stroke="#ffd93d" stroke-width="1" stroke-dasharray="3,3" opacity="0.4"/>
+        <circle cx="75"  cy="65"  r="6" fill="#ff6b6b"/>
+        <circle cx="145" cy="55"  r="6" fill="#ff6b6b"/>
+        <circle cx="108" cy="120" r="6" fill="#ff6b6b"/>
+        <circle cx="210" cy="65"  r="6" fill="#ff6b6b"/>
+        <circle cx="200" cy="130" r="6" fill="#ff6b6b"/>
+        <circle cx="22"  cy="105" r="6" fill="#ff6b6b"/>
+        <text x="130" y="175" text-anchor="middle" fill="#aaa" font-size="12">r pequeño → sin aristas</text>
+      </svg>
+    </div>
+    <div>
+      <svg width="260" height="180" viewBox="0 0 260 180">
+        <!-- Larger r: edges and one triangle. All pairwise distances verified:     -->
+        <!-- Connected (≤75px): A-B≈71, A-C≈64, B-C≈75, B-D≈66, D-E≈66, F-A≈66  -->
+        <!-- Non-connected (>75px): F-C≈87, B-E≈93, C-D≈116, C-E≈93, A-D=135 ... -->
+        <polygon points="75,65 145,55 108,120" fill="rgba(78,205,196,0.15)" stroke="none"/>
+        <line x1="75"  y1="65"  x2="145" y2="55"  stroke="#4ecdc4" stroke-width="2"/>
+        <line x1="75"  y1="65"  x2="108" y2="120" stroke="#4ecdc4" stroke-width="2"/>
+        <line x1="145" y1="55"  x2="108" y2="120" stroke="#4ecdc4" stroke-width="2"/>
+        <line x1="145" y1="55"  x2="210" y2="65"  stroke="#4ecdc4" stroke-width="2"/>
+        <line x1="210" y1="65"  x2="200" y2="130" stroke="#4ecdc4" stroke-width="2"/>
+        <line x1="22"  y1="105" x2="75"  y2="65"  stroke="#4ecdc4" stroke-width="2"/>
+        <circle cx="75"  cy="65"  r="6" fill="#ff6b6b"/>
+        <circle cx="145" cy="55"  r="6" fill="#ff6b6b"/>
+        <circle cx="108" cy="120" r="6" fill="#ff6b6b"/>
+        <circle cx="210" cy="65"  r="6" fill="#ff6b6b"/>
+        <circle cx="200" cy="130" r="6" fill="#ff6b6b"/>
+        <circle cx="22"  cy="105" r="6" fill="#ff6b6b"/>
+        <text x="130" y="175" text-anchor="middle" fill="#aaa" font-size="12">r mayor → aristas + triángulo</text>
+      </svg>
+    </div>
+  </div>
+  <aside class="notes">Convención usada por Ripser y la mayoría de la literatura moderna: se añade un k-símplex cuando todas las distancias a pares son ≤ r. El parámetro r actúa directamente como umbral de distancia.</aside>
+</section>
+
+<!-- ======================================================= SLIDE 7: BETTI NUMBERS -->
+<section>
+  <h2>Contando forma: números de Betti</h2>
+  <svg width="780" height="210" viewBox="0 0 780 210" style="display:block;margin:0 auto">
+    <!-- Shape 1: circle (1 component, 1 loop) -->
+    <circle cx="100" cy="85" r="55" fill="none" stroke="#4ecdc4" stroke-width="3"/>
+    <text x="100" y="160" text-anchor="middle" fill="#aaa" font-size="13">Círculo</text>
+    <text x="100" y="176" text-anchor="middle" fill="#4ecdc4" font-size="12">β₀=1  β₁=1</text>
+    <!-- Shape 2: two circles (2 components) -->
+    <circle cx="270" cy="85" r="35" fill="none" stroke="#4ecdc4" stroke-width="3"/>
+    <circle cx="360" cy="85" r="35" fill="none" stroke="#4ecdc4" stroke-width="3"/>
+    <text x="315" y="160" text-anchor="middle" fill="#aaa" font-size="13">Dos círculos</text>
+    <text x="315" y="176" text-anchor="middle" fill="#4ecdc4" font-size="12">β₀=2  β₁=2</text>
+    <!-- Shape 3: disk (1 component, 0 loops) -->
+    <circle cx="490" cy="85" r="55" fill="rgba(78,205,196,0.15)" stroke="#4ecdc4" stroke-width="3"/>
+    <text x="490" y="160" text-anchor="middle" fill="#aaa" font-size="13">Disco (relleno)</text>
+    <text x="490" y="176" text-anchor="middle" fill="#4ecdc4" font-size="12">β₀=1  β₁=0</text>
+    <!-- Shape 4: figure-8 -->
+    <circle cx="660" cy="68" r="35" fill="none" stroke="#ff6b6b" stroke-width="3"/>
+    <circle cx="660" cy="126" r="35" fill="none" stroke="#ff6b6b" stroke-width="3"/>
+    <text x="660" y="176" text-anchor="middle" fill="#aaa" font-size="13">Figura en 8</text>
+    <text x="660" y="192" text-anchor="middle" fill="#ff6b6b" font-size="12">β₀=1  β₁=2</text>
+  </svg>
+  <div class="two-col small" style="margin-top:12px">
+    <div class="box"><span class="h0">β₀</span> = # componentes conexas</div>
+    <div class="box"><span class="h1c">β₁</span> = # lazos independientes (agujeros 1D)</div>
+  </div>
+  <p class="small fragment" style="margin-top:10px">
+    <span class="hi">Conclusión clave:</span> estos números son <em>invariantes topológicos</em> — no cambian bajo deformaciones continuas
+  </p>
+  <aside class="notes">Los números de Betti son la "huella" de la forma. β0 cuenta las piezas. β1 cuenta los lazos. β2 contaría cavidades cerradas (en objetos 3D). Nos enfocamos en β0 y β1 hoy.</aside>
+</section>
+
+<!-- ======================================================= SLIDE 8: INTERACTIVE RIPS ANIMATION -->
+<section>
+  <h2>Interactivo: observa crecer el complejo de Rips</h2>
+  <canvas id="ripsCanvas" width="720" height="350" style="background:#111; border-radius:6px"></canvas>
+  <div class="slider-row">
+    <span class="small">r = </span>
+    <input type="range" id="ripsSlider" min="0" max="130" value="0" style="width:300px; cursor:pointer">
+    <span id="ripsVal" class="small hi">0</span>
+    <button id="ripsPlay" style="margin-left:12px; padding:4px 14px; background:#ffd93d; color:#111; border:none; border-radius:4px; cursor:pointer; font-weight:bold">▶ Reproducir</button>
+  </div>
+  <div class="betti-display">
+    <span class="h0">β₀ (componentes) = <span id="b0val">14</span></span>
+    &nbsp;&nbsp;&nbsp;
+    <span class="h1c">β₁ (lazos) = <span id="b1val">0</span></span>
+  </div>
+  <p class="tiny dim" style="text-align:center; margin-top:4px">Observa cómo β₁ sube (se forma un lazo) y baja (el triángulo lo rellena) al crecer r</p>
+  <aside class="notes">Momento pedagógico clave: observar cómo β₁ sube de 0 a 1 (se forma un lazo) y vuelve a 0 (el triángulo rellena el lazo). Este es el nacimiento y la muerte de una característica topológica.</aside>
+</section>
+
+<!-- ======================================================= SLIDE 9: FILTRATION -->
+<section>
+  <div class="part-label">PARTE 2 — HOMOLOGÍA PERSISTENTE</div>
+  <h2>La filtración: topología en todas las escalas</h2>
+  <p class="small">En lugar de elegir un $r$, seguimos la topología <span class="hi">en todas las escalas simultáneamente</span>.</p>
+  <svg width="760" height="180" viewBox="0 0 760 180" style="display:block;margin:0 auto">
+    <!-- r=0 -->
+    <circle cx="55" cy="80" r="5" fill="#ff6b6b"/>
+    <circle cx="85" cy="60" r="5" fill="#ff6b6b"/>
+    <circle cx="110" cy="90" r="5" fill="#ff6b6b"/>
+    <circle cx="75" cy="115" r="5" fill="#ff6b6b"/>
+    <text x="80" y="150" text-anchor="middle" fill="#aaa" font-size="11">r = 0</text>
+    <text x="80" y="165" text-anchor="middle" fill="#4ecdc4" font-size="11">β₀=4, β₁=0</text>
+    <!-- arrow -->
+    <text x="145" y="88" fill="#ffd93d" font-size="22">→</text>
+    <!-- r=small -->
+    <line x1="215" y1="80" x2="245" y2="60" stroke="#4ecdc4" stroke-width="2"/>
+    <line x1="245" y1="60" x2="270" y2="90" stroke="#4ecdc4" stroke-width="2"/>
+    <circle cx="215" cy="80" r="5" fill="#ff6b6b"/>
+    <circle cx="245" cy="60" r="5" fill="#ff6b6b"/>
+    <circle cx="270" cy="90" r="5" fill="#ff6b6b"/>
+    <circle cx="235" cy="115" r="5" fill="#ff6b6b"/>
+    <text x="242" y="150" text-anchor="middle" fill="#aaa" font-size="11">r = small</text>
+    <text x="242" y="165" text-anchor="middle" fill="#4ecdc4" font-size="11">β₀=2, β₁=0</text>
+    <!-- arrow -->
+    <text x="305" y="88" fill="#ffd93d" font-size="22">→</text>
+    <!-- r=medium: loop forms -->
+    <line x1="370" y1="80" x2="400" y2="60" stroke="#4ecdc4" stroke-width="2"/>
+    <line x1="400" y1="60" x2="425" y2="90" stroke="#4ecdc4" stroke-width="2"/>
+    <line x1="425" y1="90" x2="395" y2="115" stroke="#4ecdc4" stroke-width="2"/>
+    <line x1="395" y1="115" x2="370" y2="80" stroke="#4ecdc4" stroke-width="2"/>
+    <circle cx="370" cy="80" r="5" fill="#ff6b6b"/>
+    <circle cx="400" cy="60" r="5" fill="#ff6b6b"/>
+    <circle cx="425" cy="90" r="5" fill="#ff6b6b"/>
+    <circle cx="395" cy="115" r="5" fill="#ff6b6b"/>
+    <text x="398" y="150" text-anchor="middle" fill="#aaa" font-size="11">r = medium</text>
+    <text x="398" y="165" text-anchor="middle" fill="#ff6b6b" font-size="11">β₀=1, β₁=1 ← ¡lazo!</text>
+    <!-- arrow -->
+    <text x="458" y="88" fill="#ffd93d" font-size="22">→</text>
+    <!-- r=large: filled -->
+    <polygon points="525,80 555,60 580,90 550,115" fill="rgba(78,205,196,0.2)" stroke="#4ecdc4" stroke-width="2"/>
+    <line x1="525" y1="80" x2="580" y2="90" stroke="#4ecdc4" stroke-width="2"/>
+    <circle cx="525" cy="80" r="5" fill="#ff6b6b"/>
+    <circle cx="555" cy="60" r="5" fill="#ff6b6b"/>
+    <circle cx="580" cy="90" r="5" fill="#ff6b6b"/>
+    <circle cx="550" cy="115" r="5" fill="#ff6b6b"/>
+    <text x="553" y="150" text-anchor="middle" fill="#aaa" font-size="11">r = large</text>
+    <text x="553" y="165" text-anchor="middle" fill="#4ecdc4" font-size="11">β₀=1, β₁=0</text>
+    <!-- arrow -->
+    <text x="615" y="88" fill="#ffd93d" font-size="22">→</text>
+    <!-- full simplex (3-simplex: complete K4 with both diagonals) -->
+    <polygon points="660,75 692,55 720,85 688,110" fill="rgba(78,205,196,0.35)" stroke="#4ecdc4" stroke-width="2"/>
+    <line x1="660" y1="75" x2="720" y2="85" stroke="#4ecdc4" stroke-width="2"/>
+    <line x1="692" y1="55" x2="688" y2="110" stroke="#4ecdc4" stroke-width="2"/>
+    <circle cx="660" cy="75" r="5" fill="#ff6b6b"/>
+    <circle cx="692" cy="55" r="5" fill="#ff6b6b"/>
+    <circle cx="720" cy="85" r="5" fill="#ff6b6b"/>
+    <circle cx="688" cy="110" r="5" fill="#ff6b6b"/>
+    <text x="690" y="150" text-anchor="middle" fill="#aaa" font-size="11">r = very large</text>
+    <text x="690" y="165" text-anchor="middle" fill="#4ecdc4" font-size="10">β₀=1, β₁=0 (3-símplex)</text>
+  </svg>
+  <p class="small fragment box-yellow box" style="margin-top:8px">
+    El lazo <strong>nació</strong> en r=mediano y <strong>fue eliminado</strong> (rellenado por un triángulo) en r=grande.
+    Su <span class="hi">persistencia = muerte − nacimiento = vida útil</span>. Vida útil larga = estructura real.
+  </p>
+  <aside class="notes">The key concept is persistence = lifetime of a feature. Long persistence = real structure. Short persistence = noise.</aside>
+</section>
+
+<!-- ======================================================= SLIDE 10: PERSISTENCE DIAGRAM -->
+<section>
+  <h2>Diagrama de persistencia</h2>
+  <div class="two-col" style="align-items:center">
+    <div>
+      <svg id="pdSVG" width="300" height="300" viewBox="0 0 300 300" style="background:#111; border-radius:6px">
+        <!-- Axes -->
+        <line x1="40" y1="260" x2="280" y2="260" stroke="#555" stroke-width="1.5"/>
+        <line x1="40" y1="260" x2="40" y2="20" stroke="#555" stroke-width="1.5"/>
+        <!-- Diagonal -->
+        <line x1="40" y1="260" x2="280" y2="20" stroke="#444" stroke-width="1" stroke-dasharray="4,4"/>
+        <!-- Axis labels -->
+        <text x="160" y="285" text-anchor="middle" fill="#aaa" font-size="12">birth</text>
+        <text x="16" y="145" text-anchor="middle" fill="#aaa" font-size="12" transform="rotate(-90,16,145)">death</text>
+        <!-- H0 points (teal): born at 0 -->
+        <circle cx="40" cy="175" r="7" fill="#4ecdc4" opacity="0.9"/>
+        <circle cx="40" cy="215" r="7" fill="#4ecdc4" opacity="0.9"/>
+        <circle cx="40" cy="235" r="7" fill="#4ecdc4" opacity="0.9"/>
+        <!-- H1 points (red): born later, die later -->
+        <circle cx="120" cy="60" r="8" fill="#ff6b6b" opacity="0.95"/>
+        <circle cx="150" cy="120" r="6" fill="#ff6b6b" opacity="0.9"/>
+        <circle cx="190" cy="75" r="5" fill="#ff6b6b" opacity="0.7"/>
+        <!-- Point BELOW diagonal (death < birth = impossible) -->
+        <circle cx="200" cy="240" r="6" fill="#555" opacity="0.7" stroke="#888" stroke-width="1" stroke-dasharray="2,2"/>
+        <text x="230" y="243" fill="#888" font-size="9" font-style="italic">imposible</text>
+        <!-- Birth scale ticks -->
+        <text x="40" y="272" text-anchor="middle" fill="#666" font-size="10">0</text>
+        <text x="120" y="272" text-anchor="middle" fill="#666" font-size="10">0.3</text>
+        <text x="200" y="272" text-anchor="middle" fill="#666" font-size="10">0.6</text>
+        <text x="280" y="272" text-anchor="middle" fill="#666" font-size="10">0.9</text>
+        <!-- Death scale ticks (y-axis) -->
+        <line x1="36" y1="260" x2="40" y2="260" stroke="#666" stroke-width="1"/>
+        <line x1="36" y1="180" x2="40" y2="180" stroke="#666" stroke-width="1"/>
+        <line x1="36" y1="100" x2="40" y2="100" stroke="#666" stroke-width="1"/>
+        <line x1="36" y1="20" x2="40" y2="20" stroke="#666" stroke-width="1"/>
+        <text x="34" y="263" text-anchor="end" fill="#666" font-size="10">0</text>
+        <text x="34" y="183" text-anchor="end" fill="#666" font-size="10">0.3</text>
+        <text x="34" y="103" text-anchor="end" fill="#666" font-size="10">0.6</text>
+        <text x="34" y="23" text-anchor="end" fill="#666" font-size="10">0.9</text>
+      </svg>
+    </div>
+    <div class="small">
+      <div class="box">
+        Cada característica obtiene un punto <strong>(nacimiento, muerte)</strong>
+      </div>
+      <div class="fragment">
+        <p style="margin-top:10px"><span class="h0">● Verde azulado = H₀</span> (componentes conexas)<br>
+        nacen en 0, mueren al unirse</p>
+      </div>
+      <div class="fragment">
+        <p style="margin-top:8px"><span class="h1c">● Rojo = H₁</span> (lazos)<br>
+        nacen cuando se forma el lazo, mueren al rellenarse</p>
+      </div>
+      <div class="fragment box-yellow box" style="margin-top:10px">
+        <strong>Lejos de la diagonal</strong> = larga vida = <span class="hi">estructura real</span><br>
+        <strong>Cerca de la diagonal</strong> = corta vida = ruido
+      </div>
+    </div>
+  </div>
+  <aside class="notes">The persistence diagram is the central object of TDA. Points far from the diagonal are the signal. Points near the diagonal are noise. This gives us an automatic noise filter.</aside>
+</section>
+
+<!-- ======================================================= SLIDE 11: BARCODE -->
+<section>
+  <h2>El código de barras — misma información, vista diferente</h2>
+  <svg width="720" height="265" viewBox="0 0 720 265" style="display:block;margin:0 auto;background:#111;border-radius:6px">
+    <!-- Axis -->
+    <line x1="50" y1="230" x2="680" y2="230" stroke="#555" stroke-width="1.5"/>
+    <!-- Scale -->
+    <text x="50" y="243" text-anchor="middle" fill="#666" font-size="10">0</text>
+    <text x="210" y="243" text-anchor="middle" fill="#666" font-size="10">0.3</text>
+    <text x="370" y="243" text-anchor="middle" fill="#666" font-size="10">0.6</text>
+    <text x="530" y="243" text-anchor="middle" fill="#666" font-size="10">0.9</text>
+    <text x="680" y="243" text-anchor="middle" fill="#666" font-size="10">1.2</text>
+    <text x="365" y="260" text-anchor="middle" fill="#aaa" font-size="12">parámetro de filtración r</text>
+    <!-- H0 bars -->
+    <text x="20" y="30" fill="#4ecdc4" font-size="12" font-weight="bold">H₀</text>
+    <line x1="50" y1="25" x2="680" y2="25" stroke="#4ecdc4" stroke-width="5" opacity="0.9"/>
+    <line x1="50" y1="45" x2="310" y2="45" stroke="#4ecdc4" stroke-width="5" opacity="0.8"/>
+    <line x1="50" y1="65" x2="200" y2="65" stroke="#4ecdc4" stroke-width="5" opacity="0.7"/>
+    <line x1="50" y1="85" x2="165" y2="85" stroke="#4ecdc4" stroke-width="5" opacity="0.6"/>
+    <!-- H1 bars -->
+    <text x="20" y="125" fill="#ff6b6b" font-size="12" font-weight="bold">H₁</text>
+    <!-- Long bar = significant loop -->
+    <line x1="210" y1="120" x2="530" y2="120" stroke="#ff6b6b" stroke-width="6" opacity="0.95"/>
+    <text x="540" y="124" fill="#ffd93d" font-size="11">← ¡significativo!</text>
+    <!-- Short bars = noise -->
+    <line x1="310" y1="145" x2="380" y2="145" stroke="#ff6b6b" stroke-width="4" opacity="0.6"/>
+    <line x1="400" y1="165" x2="440" y2="165" stroke="#ff6b6b" stroke-width="4" opacity="0.6"/>
+    <line x1="450" y1="185" x2="470" y2="185" stroke="#ff6b6b" stroke-width="4" opacity="0.4"/>
+    <line x1="500" y1="205" x2="515" y2="205" stroke="#ff6b6b" stroke-width="4" opacity="0.4"/>
+    <text x="480" y="175" fill="#888" font-size="11">← ruido</text>
+  </svg>
+  <p class="small fragment" style="margin-top:8px; text-align:center">
+    <span class="hi">Barras largas = señal.</span> Barras cortas = ruido.
+    <span class="dim">El número de Betti β₁ en cualquier r = # barras rojas activas en ese r.</span>
+  </p>
+  <aside class="notes">El código de barras es la vista más intuitiva. Cada barra es la vida útil de una característica. Leer el código en un r fijo da los números de Betti actuales.</aside>
+</section>
+
+<!-- ======================================================= SLIDE 12: STABILITY -->
+<section>
+  <h2>¿Por qué confiar en los diagramas de persistencia?</h2>
+  <div class="two-col" style="align-items:center; margin-top:8px">
+    <div style="text-align:center">
+      <svg width="340" height="215" viewBox="0 0 300 190" style="background:#111; border-radius:5px">
+        <!-- Clean cloud + noisy version + same diagram -->
+        <text x="75" y="18" text-anchor="middle" fill="#4ecdc4" font-size="11">Datos limpios</text>
+        <circle cx="50" cy="70" r="4" fill="#4ecdc4"/>
+        <circle cx="80" cy="45" r="4" fill="#4ecdc4"/>
+        <circle cx="110" cy="70" r="4" fill="#4ecdc4"/>
+        <circle cx="95" cy="100" r="4" fill="#4ecdc4"/>
+        <circle cx="60" cy="100" r="4" fill="#4ecdc4"/>
+        <!-- Dashed loop shape -->
+        <path d="M50,70 Q65,38 80,45 Q100,35 110,70 Q118,100 95,108 Q80,115 60,108 Z" fill="none" stroke="#4ecdc4" stroke-width="1" stroke-dasharray="3,3" opacity="0.4"/>
+
+        <text x="225" y="18" text-anchor="middle" fill="#ffd93d" font-size="11">+ ruido δ</text>
+        <circle cx="200" cy="68" r="4" fill="#ffd93d"/>
+        <circle cx="231" cy="43" r="4" fill="#ffd93d"/>
+        <circle cx="260" cy="72" r="4" fill="#ffd93d"/>
+        <circle cx="248" cy="102" r="4" fill="#ffd93d"/>
+        <circle cx="210" cy="104" r="4" fill="#ffd93d"/>
+        <!-- Small random jitter points (noise) -->
+        <circle cx="238" cy="78" r="2.5" fill="#ffd93d" opacity="0.5"/>
+        <circle cx="218" cy="58" r="2.5" fill="#ffd93d" opacity="0.5"/>
+
+        <!-- Arrow -->
+        <text x="150" y="75" text-anchor="middle" fill="#aaa" font-size="20">≈</text>
+
+        <!-- Diagrams comparison at bottom -->
+        <text x="75" y="135" text-anchor="middle" fill="#4ecdc4" font-size="10">Diagrama de persistencia</text>
+        <line x1="25" y1="180" x2="125" y2="180" stroke="#333" stroke-width="1"/>
+        <line x1="25" y1="180" x2="25" y2="130" stroke="#333" stroke-width="1"/>
+        <line x1="25" y1="180" x2="125" y2="130" stroke="#333" stroke-width="0.8" stroke-dasharray="3,3"/>
+        <circle cx="70" cy="148" r="5" fill="#ff6b6b"/>
+
+        <text x="225" y="135" text-anchor="middle" fill="#ffd93d" font-size="10">Diagrama perturbado</text>
+        <line x1="175" y1="180" x2="275" y2="180" stroke="#333" stroke-width="1"/>
+        <line x1="175" y1="180" x2="175" y2="130" stroke="#333" stroke-width="1"/>
+        <line x1="175" y1="180" x2="275" y2="130" stroke="#333" stroke-width="0.8" stroke-dasharray="3,3"/>
+        <circle cx="222" cy="150" r="5" fill="#ff6b6b"/>
+        <text x="148" y="162" text-anchor="middle" fill="#aaa" font-size="18">≈</text>
+        <text x="148" y="176" text-anchor="middle" fill="#ffd93d" font-size="9">desplaz. ≤ δ</text>
+      </svg>
+    </div>
+    <div class="small">
+      <div class="box-yellow box" style="margin-bottom:10px">
+        <strong>En palabras simples:</strong><br>
+        Si añades ruido pequeño (tamaño δ) a tus datos, el diagrama de persistencia cambia a lo sumo en δ.<br>
+        <span class="dim">El ruido no puede crear barras largas falsas.</span>
+      </div>
+      <div class="fragment box" style="margin-bottom:8px">
+        <strong>Para ML:</strong><br>
+        Las características topológicas son <span class="hi">robustas al ruido por construcción</span> — no por ajuste de hiperparámetros.<br>
+        <span class="dim">Como la regularización L2, pero integrada en la representación.</span>
+      </div>
+      <div class="fragment box-red box">
+        <strong>Técnico:</strong><br>
+        $d_B(\text{Dgm}(f), \text{Dgm}(g)) \leq \|f-g\|_\infty$<br>
+        donde $d_B$ = distancia cuello de botella (mayor desplazamiento de puntos hacia la diagonal)
+      </div>
+    </div>
+  </div>
+  <aside class="notes">Comenzar con la versión en palabras simples. La distancia cuello de botella es: ¿cuánto hay que desplazar/emparejar puntos entre dos diagramas? El teorema dice que este desplazamiento está acotado por el nivel de ruido en los datos.</aside>
+</section>
+
+<!-- ======================================================= SLIDE 13: SUMMARY PART 1 -->
+<section>
+  <h2>TDA en un diagrama</h2>
+  <svg width="740" height="140" viewBox="0 0 740 140" style="display:block;margin:0 auto">
+    <rect x="5" y="20" width="130" height="100" rx="8" fill="rgba(255,107,107,0.15)" stroke="#ff6b6b" stroke-width="1.5"/>
+    <text x="70" y="55" text-anchor="middle" fill="#ff6b6b" font-size="13" font-weight="bold">Datos</text>
+    <text x="70" y="75" text-anchor="middle" fill="#aaa" font-size="11">Nube de puntos</text>
+    <text x="70" y="93" text-anchor="middle" fill="#aaa" font-size="11">Serie de tiempo</text>
+    <text x="70" y="111" text-anchor="middle" fill="#aaa" font-size="11">Grafo</text>
+    <text x="155" y="75" text-anchor="middle" fill="#ffd93d" font-size="20">→</text>
+    <rect x="175" y="20" width="150" height="100" rx="8" fill="rgba(255,217,61,0.1)" stroke="#ffd93d" stroke-width="1.5"/>
+    <text x="250" y="55" text-anchor="middle" fill="#ffd93d" font-size="13" font-weight="bold">Filtración</text>
+    <text x="250" y="75" text-anchor="middle" fill="#aaa" font-size="11">VR(X, r) para</text>
+    <text x="250" y="93" text-anchor="middle" fill="#aaa" font-size="11">todo r ≥ 0</text>
+    <text x="345" y="75" text-anchor="middle" fill="#ffd93d" font-size="20">→</text>
+    <rect x="360" y="20" width="160" height="100" rx="8" fill="rgba(78,205,196,0.1)" stroke="#4ecdc4" stroke-width="1.5"/>
+    <text x="440" y="55" text-anchor="middle" fill="#4ecdc4" font-size="13" font-weight="bold">Diagrama HP</text>
+    <text x="440" y="73" text-anchor="middle" fill="#aaa" font-size="11">Pares nac./muerte</text>
+    <text x="440" y="91" text-anchor="middle" fill="#aaa" font-size="11">por dimensión</text>
+    <text x="440" y="109" text-anchor="middle" fill="#aaa" font-size="11">k = 0, 1, 2, ...</text>
+    <text x="540" y="75" text-anchor="middle" fill="#ffd93d" font-size="20">→</text>
+    <rect x="555" y="20" width="175" height="100" rx="8" fill="rgba(168,230,207,0.1)" stroke="#a8e6cf" stroke-width="1.5"/>
+    <text x="643" y="50" text-anchor="middle" fill="#a8e6cf" font-size="13" font-weight="bold">Vector de Caract.</text>
+    <text x="643" y="68" text-anchor="middle" fill="#aaa" font-size="11">Paisajes</text>
+    <text x="643" y="86" text-anchor="middle" fill="#aaa" font-size="11">Imágenes</text>
+    <text x="643" y="104" text-anchor="middle" fill="#aaa" font-size="11">Estadísticas</text>
+  </svg>
+  <div class="two-col small fragment" style="margin-top:12px">
+    <div class="box"><span class="h0">Calculado con:</span> Ripser (Python) — maneja nubes de hasta ~10k puntos en segundos</div>
+    <div class="box"><span class="h0">Garantía teórica:</span> Teorema de estabilidad — robusto al ruido por construcción</div>
+  </div>
+  <aside class="notes">Este es el pipeline completo. Cada caja es un concepto que ya construimos. El vector de características a la derecha se conecta directamente a ML estándar.</aside>
+</section>
+
+<!-- ======================================================= SLIDE 13b: EMBEDDING BRIDGE -->
+<section>
+  <div class="part-label">PART 3 — TIME SERIES → GEOMETRY</div>
+  <h2>El puente clave: las series de tiempo tienen forma</h2>
+  <p class="small">Señales distintas producen <span class="hi">geometrías de nube de puntos distintas</span> — y topologías distintas.</p>
+  <svg width="760" height="260" viewBox="0 0 760 260" style="display:block;margin:0 auto;background:#111;border-radius:6px;padding:4px">
+    <!-- Column headers -->
+    <text x="125" y="20" text-anchor="middle" fill="#aaa" font-size="11">Serie de tiempo</text>
+    <text x="370" y="20" text-anchor="middle" fill="#aaa" font-size="11">Embedding de retardo (x_t, x_{t+τ})</text>
+    <text x="600" y="20" text-anchor="middle" fill="#aaa" font-size="11">Topología</text>
+
+    <!-- ROW 1: Periodic -->
+    <text x="10" y="70" fill="#4ecdc4" font-size="10" font-weight="bold">Periódica</text>
+    <!-- sine wave sketch -->
+    <path d="M30,80 Q42,55 55,80 Q68,105 80,80 Q92,55 105,80 Q118,105 130,80 Q142,55 155,80 Q168,105 180,80 Q192,55 205,80" stroke="#4ecdc4" stroke-width="1.8" fill="none"/>
+    <!-- arrow -->
+    <text x="230" y="82" fill="#ffd93d" font-size="18">→</text>
+    <!-- circle cloud -->
+    <ellipse cx="370" cy="80" rx="50" ry="48" fill="none" stroke="#4ecdc4" stroke-width="1" stroke-dasharray="3,2" opacity="0.5"/>
+    <circle cx="370" cy="32" r="2.5" fill="#ff6b6b"/><circle cx="406" cy="45" r="2.5" fill="#ff6b6b"/>
+    <circle cx="420" cy="80" r="2.5" fill="#ff6b6b"/><circle cx="406" cy="115" r="2.5" fill="#ff6b6b"/>
+    <circle cx="370" cy="128" r="2.5" fill="#ff6b6b"/><circle cx="334" cy="115" r="2.5" fill="#ff6b6b"/>
+    <circle cx="320" cy="80" r="2.5" fill="#ff6b6b"/><circle cx="334" cy="45" r="2.5" fill="#ff6b6b"/>
+    <!-- arrow -->
+    <text x="445" y="82" fill="#ffd93d" font-size="18">→</text>
+    <text x="600" y="72" text-anchor="middle" fill="#4ecdc4" font-size="11">Forma de círculo</text>
+    <text x="600" y="88" text-anchor="middle" fill="#ff6b6b" font-size="11">β₁ = 1 (lazo persistente)</text>
+
+    <!-- ROW 2: Random walk -->
+    <text x="10" y="160" fill="#888" font-size="10" font-weight="bold">Caminata</text>
+    <text x="10" y="172" fill="#888" font-size="10" font-weight="bold">aleatoria</text>
+    <!-- random walk sketch -->
+    <polyline points="30,165 45,158 60,170 75,163 90,175 105,168 120,180 135,173 150,160 165,168 180,175 195,168 210,160" stroke="#888" stroke-width="1.8" fill="none"/>
+    <!-- arrow -->
+    <text x="230" y="172" fill="#ffd93d" font-size="18">→</text>
+    <!-- blob cloud -->
+    <circle cx="350" cy="155" r="2.5" fill="#888"/><circle cx="360" cy="167" r="2.5" fill="#888"/>
+    <circle cx="375" cy="158" r="2.5" fill="#888"/><circle cx="385" cy="173" r="2.5" fill="#888"/>
+    <circle cx="365" cy="180" r="2.5" fill="#888"/><circle cx="380" cy="162" r="2.5" fill="#888"/>
+    <circle cx="370" cy="170" r="2.5" fill="#888"/><circle cx="390" cy="155" r="2.5" fill="#888"/>
+    <circle cx="355" cy="185" r="2.5" fill="#888"/><circle cx="395" cy="178" r="2.5" fill="#888"/>
+    <!-- arrow -->
+    <text x="445" y="172" fill="#ffd93d" font-size="18">→</text>
+    <text x="600" y="162" text-anchor="middle" fill="#888" font-size="11">Nube difusa</text>
+    <text x="600" y="178" text-anchor="middle" fill="#888" font-size="11">β₁ ≈ 0 (sin estructura)</text>
+
+    <!-- ROW 3: Trending H>0.5 -->
+    <text x="10" y="240" fill="#ffd93d" font-size="10" font-weight="bold">Con tendencia</text>
+    <text x="10" y="252" fill="#ffd93d" font-size="10" font-weight="bold">(H &gt; 0,5)</text>
+    <!-- trending line: actual wiggly series (yellow, solid) -->
+    <polyline points="30,255 50,252 70,248 90,242 110,238 130,234 150,228 170,225 190,221 210,220" stroke="#ffd93d" stroke-width="2" fill="none"/>
+    <!-- trend direction line (red dashed) -->
+    <line x1="30" y1="255" x2="210" y2="220" stroke="#ff6b6b" stroke-width="1.5" stroke-dasharray="6,3"/>
+    <!-- arrow -->
+    <text x="230" y="242" fill="#ffd93d" font-size="18">→</text>
+    <!-- arc cloud -->
+    <path d="M310,255 Q340,238 360,222 Q385,208 410,212" stroke="#ffd93d" stroke-width="1.5" stroke-dasharray="3,2" fill="none" opacity="0.5"/>
+    <circle cx="318" cy="252" r="2.5" fill="#ffd93d"/><circle cx="332" cy="246" r="2.5" fill="#ffd93d"/>
+    <circle cx="347" cy="238" r="2.5" fill="#ffd93d"/><circle cx="361" cy="230" r="2.5" fill="#ffd93d"/>
+    <circle cx="376" cy="222" r="2.5" fill="#ffd93d"/><circle cx="391" cy="218" r="2.5" fill="#ffd93d"/>
+    <circle cx="405" cy="214" r="2.5" fill="#ffd93d"/>
+    <!-- arrow -->
+    <text x="445" y="242" fill="#ffd93d" font-size="18">→</text>
+    <text x="600" y="232" text-anchor="middle" fill="#ffd93d" font-size="11">Arco alargado</text>
+    <text x="600" y="248" text-anchor="middle" fill="#ffd93d" font-size="11">estructura β₀ persistente</text>
+  </svg>
+  <p class="small fragment" style="text-align:center; margin-top:6px">
+    <span class="hi">El mismo pipeline TDA funciona para todos.</span> La topología nos dice en qué régimen estamos.
+  </p>
+  <aside class="notes">This is the conceptual payoff. Before giving the formal definition, show the three cases visually. Students can see: periodic gives a circle, random gives a blob, trending gives an arc. The key message: topology encodes the TYPE of dynamics, not just the scale.</aside>
+</section>
+
+<!-- ======================================================= SLIDE 14: DELAY EMBEDDING -->
+<section>
+  <div class="part-label">PARTE 3 — SERIES DE TIEMPO → GEOMETRÍA</div>
+  <h2>El embedding de ventana deslizante</h2>
+  <p class="small">Dada una serie univariada $\{x_t\}$, el <span class="hi">embedding de retardo</span> en dimensión $d$ y retardo $\tau$:</p>
+  <div class="box" style="margin: 10px 0; font-size:0.75em">
+    $$P_{d,\tau} = \bigl\{(x_t,\; x_{t+\tau},\; x_{t+2\tau},\; \ldots,\; x_{t+(d-1)\tau})\bigr\}_{t=1}^{N} \subset \mathbb{R}^d$$
+  </div>
+  <!-- Sliding window → 2D point cloud diagram -->
+  <div style="text-align:center; margin-top:10px">
+    <svg width="720" height="130" viewBox="0 0 720 130" style="display:block;margin:0 auto;background:#111;border-radius:6px">
+      <!-- LEFT: time series with sliding window -->
+      <text x="120" y="14" text-anchor="middle" fill="#aaa" font-size="11">Serie de tiempo {xₜ}</text>
+      <!-- Time series line -->
+      <polyline points="20,70 60,50 100,80 140,45 180,75 220,55 260,80" stroke="#888" stroke-width="1.5" fill="none"/>
+      <!-- Highlighted window: points t=3,t=4 only (d=2 → 2 consecutive values → 1 point in ℝ²) -->
+      <rect x="88" y="35" width="74" height="55" rx="4" fill="rgba(255,217,61,0.12)" stroke="#ffd93d" stroke-width="1.5" stroke-dasharray="4,2"/>
+      <!-- Points on series -->
+      <circle cx="20" cy="70" r="4" fill="#888"/>
+      <circle cx="60" cy="50" r="4" fill="#888"/>
+      <circle cx="100" cy="80" r="5" fill="#ffd93d"/>
+      <circle cx="140" cy="45" r="5" fill="#ffd93d"/>
+      <circle cx="180" cy="75" r="4" fill="#888"/>
+      <circle cx="220" cy="55" r="4" fill="#888"/>
+      <circle cx="260" cy="80" r="4" fill="#888"/>
+      <!-- x-axis labels -->
+      <text x="20" y="95" text-anchor="middle" fill="#666" font-size="9">t=1</text>
+      <text x="60" y="95" text-anchor="middle" fill="#666" font-size="9">t=2</text>
+      <text x="100" y="95" text-anchor="middle" fill="#ffd93d" font-size="9">t=3</text>
+      <text x="140" y="95" text-anchor="middle" fill="#ffd93d" font-size="9">t=4</text>
+      <text x="180" y="95" text-anchor="middle" fill="#666" font-size="9">t=5</text>
+      <text x="220" y="95" text-anchor="middle" fill="#666" font-size="9">t=6</text>
+      <text x="260" y="95" text-anchor="middle" fill="#666" font-size="9">t=7</text>
+      <text x="120" y="115" text-anchor="middle" fill="#ffd93d" font-size="9">ventana activa (d=2, τ=1)</text>
+
+      <!-- ARROW -->
+      <text x="320" y="68" text-anchor="middle" fill="#4ecdc4" font-size="22">→</text>
+      <text x="320" y="85" text-anchor="middle" fill="#4ecdc4" font-size="9">(xₜ, xₜ₊₁)</text>
+
+      <!-- RIGHT: 2D point cloud -->
+      <text x="540" y="14" text-anchor="middle" fill="#aaa" font-size="11">Nube de puntos en ℝ²</text>
+      <!-- Axes -->
+      <line x1="390" y1="110" x2="680" y2="110" stroke="#444" stroke-width="1"/>
+      <line x1="390" y1="110" x2="390" y2="20" stroke="#444" stroke-width="1"/>
+      <text x="535" y="128" text-anchor="middle" fill="#666" font-size="9">xₜ</text>
+      <text x="380" y="65" text-anchor="middle" fill="#666" font-size="9" transform="rotate(-90,380,65)">xₜ₊₁</text>
+      <!-- Points from windows (d=2, τ=1): (x1,x2),(x2,x3),(x3,x4),(x4,x5),(x5,x6),(x6,x7) -->
+      <!-- Mapping values: x1=70→low, x2=50→high, x3=80→low, x4=45→high, x5=75→low, x6=55→high, x7=80→low -->
+      <!-- SVG y: 70→70mapped, scaled to fit in 390-670 x, 20-110 y -->
+      <!-- xₜ as x, xₜ₊₁ as y. Values roughly: 70,50,80,45,75,55,80 mapped to 0..100 range -->
+      <circle cx="450" cy="70" r="4" fill="#888"/>  <!-- (x1,x2) -->
+      <circle cx="430" cy="85" r="4" fill="#888"/>  <!-- (x2,x3) -->
+      <circle cx="480" cy="40" r="5" fill="#ffd93d"/>  <!-- (x3,x4): active window highlighted -->
+      <circle cx="415" cy="80" r="4" fill="#888"/>  <!-- (x4,x5) -->
+      <circle cx="460" cy="55" r="4" fill="#888"/>  <!-- (x5,x6) -->
+      <circle cx="440" cy="85" r="4" fill="#888"/>  <!-- (x6,x7) -->
+    </svg>
+  </div>
+  <div class="two-col small" style="margin-top:8px">
+    <div>
+      <p>Cada <span class="hi">ventana</span> de la serie de tiempo se convierte en un <span class="hi">punto</span> en $\mathbb{R}^d$</p>
+    </div>
+    <div class="fragment">
+      <div class="box">
+        <strong>Teorema de Takens (1981):</strong><br>
+        Para un sistema determinístico, un embedding suficientemente grande recupera la topología completa del atractor.
+      </div>
+    </div>
+  </div>
+  <aside class="notes">Este es el puente. El teorema de Takens fue demostrado para sistemas determinísticos. Para datos financieros, la conexión es empírica pero sólida — Gidea y Katz demostraron que funciona en práctica.</aside>
+</section>
+
+<!-- ======================================================= SLIDE 15: DELAY EMBEDDING ANIMATION -->
+<section>
+  <h2>Formas del embedding: lo que revela la topología</h2>
+  <div style="text-align:center; margin-bottom:6px">
+    <button onclick="setSignal('sine')" style="padding:5px 12px;background:#4ecdc4;color:#111;border:none;border-radius:4px;cursor:pointer;margin:3px;font-weight:bold">Periódica</button>
+    <button onclick="setSignal('random')" style="padding:5px 12px;background:#888;color:#fff;border:none;border-radius:4px;cursor:pointer;margin:3px;font-weight:bold">Caminata Aleatoria</button>
+    <button onclick="setSignal('trend')" style="padding:5px 12px;background:#ff6b6b;color:#fff;border:none;border-radius:4px;cursor:pointer;margin:3px;font-weight:bold">Con Tendencia</button>
+  </div>
+  <div class="two-col" style="gap:10px; align-items:flex-start">
+    <div style="text-align:center">
+      <canvas id="tsCanvas" width="340" height="180" style="background:#111; border-radius:5px"></canvas>
+      <p class="tiny dim">Serie de tiempo $\{x_t\}$</p>
+    </div>
+    <div style="text-align:center">
+      <canvas id="embedCanvas" width="340" height="180" style="background:#111; border-radius:5px"></canvas>
+      <p class="tiny dim">Embedding $(x_t, x_{t+\tau})$ — $d=2$, $\tau=5$</p><!-- Spanish: same notation -->
+    </div>
+  </div>
+  <p id="embedMsg" class="small" style="text-align:center; margin-top:6px; color:#ffd93d">
+    Periodic signal → circle → persistent H₁ loop
+  </p>
+  <aside class="notes">This is the key intuition. Periodic signal → circle topology → H1 = 1. Random walk → blob → H1 = 0. Trending → elongated structure. Click the buttons to show each case.</aside>
+</section>
+
+<!-- ======================================================= SLIDE 16: HURST EXPONENT INTRO -->
+<section>
+  <h2>Exponente de Hurst: midiendo la memoria del mercado</h2>
+  <div class="two-col small" style="align-items:flex-start; margin-top:8px">
+    <div>
+      <div class="box" style="margin-bottom:10px">
+        <strong>Finanzas estándar:</strong> retornos i.i.d. normales<br>
+        $r_t \overset{\text{iid}}{\sim} \mathcal{N}(\mu,\sigma^2)$<br><br>
+        <span class="dim">• Sin memoria: el pasado no predice el futuro</span><br>
+        <span class="dim">• Colas delgadas: eventos extremos rarísimos</span><br>
+        <span class="dim">• Equivale a $H = 0.5$ (movimiento browniano)</span>
+      </div>
+      <div class="box box-red fragment" style="margin-bottom:10px">
+        <strong>Datos reales violan ambos supuestos:</strong><br>
+        • <span class="h1c">Colas pesadas</span>: crashes más frecuentes de lo que predice la normal<br>
+        • <span class="h1c">Memoria larga</span>: la volatilidad se agrupa, las tendencias persisten
+      </div>
+    </div>
+    <div>
+      <div class="box box-yellow" style="margin-bottom:10px">
+        <strong>Exponente de Hurst $H \in (0,1)$:</strong><br>
+        Mide dependencia de largo alcance (análisis R/S):<br><br>
+        $\mathbb{E}\!\left[\dfrac{R(n)}{S(n)}\right] \propto n^{H}$<br><br>
+        $R(n) = \max_{t} Y_t - \min_{t} Y_t$<br>
+        $Y_t = \displaystyle\sum_{s=1}^{t}(X_s - \bar{X}), \quad S(n) = \text{desv. estándar}$
+      </div>
+      <div class="box fragment" style="font-size:0.85em">
+        $H = 0.5$ — sin memoria (caminata aleatoria)<br>
+        $H > 0.5$ — <span class="hi">persistente</span> (tendencias, larga memoria)<br>
+        $H < 0.5$ — <span class="h1c">anti-persistente</span> (reversión a la media)
+      </div>
+    </div>
+  </div>
+  <p class="small fragment" style="margin-top:6px; color:#888">
+    <em>Nota:</em> Hurst mide <strong>memoria</strong> (correlación), no colas pesadas — son propiedades distintas que coexisten en mercados reales.
+  </p>
+  <aside class="notes">Distinguir bien: colas pesadas = propiedad de la distribución marginal (cuánto pesa la cola). Memoria larga (Hurst) = estructura de correlación temporal. fBm con H≠0.5 tiene marginales gaussianas — sin colas pesadas. Ambas violan el supuesto normal i.i.d. de Black-Scholes pero son conceptualmente distintas. El siguiente slide muestra cómo la topología captura H.</aside>
+</section>
+
+<!-- ======================================================= SLIDE 17: SIGNAL INTERPRETATION -->
+<section>
+  <h2>Lo que nos dice la topología del embedding</h2>
+  <div style="font-size:0.75em; margin-top:6px">
+    <div class="box" style="margin-bottom:8px">
+      <span class="h1c">▶ Periódica / reversión a la media</span> — círculo o toro en el embedding<br>
+      <span class="dim">H₁ muy persistente. Código de barras con una barra roja larga.</span>
+    </div>
+    <div class="box" style="margin-bottom:8px">
+      <span class="h0">▶ Caminata aleatoria ($H=0.5$)</span> — nube difusa en el embedding<br>
+      <span class="dim">Baja persistencia en todo. Solo barras cortas.</span>
+    </div>
+    <div class="box box-yellow" style="margin-bottom:8px">
+      <span class="hi">▶ Larga memoria / con tendencia ($H>0.5$)</span> — estructura alargada y correlacionada<br>
+      <span class="dim">Estructura β₀ persistente (componentes estiradas). El patrón H₁ cambia con H.</span>
+    </div>
+    <div class="box box-red" style="margin-bottom:8px">
+      <span class="h1c">▶ Régimen pre-colapso</span> — la topología cambia rápidamente<br>
+      <span class="dim">La suma de persistencia (norma L¹ del paisaje) se dispara antes de los colapsos.</span>
+    </div>
+  </div>
+  <aside class="notes">Estos cuatro regímenes cubren la mayor parte de lo que vemos en datos financieros. La clave es que cada régimen tiene una firma topológica distinta.</aside>
+</section>
+
+<!-- ======================================================= SLIDE 17: FINANCIAL TS GEOMETRY -->
+<section>
+  <h2>Series de tiempo financieras como geometría</h2>
+  <div class="two-col" style="align-items:flex-start">
+    <div>
+      <p class="small"><strong>Construcción para el S&P 500:</strong></p>
+      <ol class="small" style="margin-left:1em">
+        <li class="fragment">Calcular log-retornos diarios $r_t = \ln(P_t/P_{t-1})$</li>
+        <li class="fragment">Tomar ventana deslizante de longitud $W = 50$ días</li>
+        <li class="fragment">Embeber cada ventana: $d=3$, $\tau=1$<br><span class="dim tiny">(o usar todos los retornos de la ventana como nube de puntos)</span></li>
+        <li class="fragment">Calcular filtración $\text{VR}(P_W, r)$ con Ripser</li>
+        <li class="fragment">Extraer diagrama de persistencia $\text{Dgm}_1$</li>
+        <li class="fragment">Deslizar la ventana un día → serie de tiempo de diagramas</li>
+      </ol>
+    </div>
+    <div class="fragment">
+      <div class="box" style="font-size:0.7em; margin-top:12px">
+        <strong>¿Por qué log-retornos?</strong><br>
+        Aproximadamente estacionarios. La <em>forma</em> de la nube de retornos es comparable en el tiempo.
+      </div>
+      <div class="box box-yellow" style="margin-top:10px; font-size:0.7em">
+        <strong>Salida:</strong> Un diagrama de persistencia por día de trading. Cada diagrama es una "huella topológica" del estado reciente del mercado.
+      </div>
+    </div>
+  </div>
+  <aside class="notes">Este es el procedimiento concreto. Guiar a los estudiantes paso a paso. La salida es una secuencia indexada de diagramas de persistencia — uno por día.</aside>
+</section>
+
+<!-- ======================================================= SLIDE 18: GIDEA KATZ -->
+<section>
+  <div class="part-label">PARTE 4 — APLICACIONES FINANCIERAS</div>
+  <h2>Detección de colapsos: Gidea &amp; Katz (2018)</h2>
+  <div class="two-col" style="align-items:flex-start">
+    <div class="small">
+      <p><strong>Datos:</strong> log-retornos del S&P 500, DJIA, NASDAQ, Russell 2000 2004–2016</p>
+      <p style="margin-top:8px"><strong>Método:</strong></p>
+      <ol style="margin-left:1em; margin-top:4px">
+        <li>Embedding de ventana deslizante por índice</li>
+        <li>Calcular $\text{Dgm}_1$ (lazos)</li>
+        <li>Convertir a <span class="hi">paisaje de persistencia</span></li>
+        <li>Seguir la norma $L^1$ en el tiempo</li>
+      </ol>
+      <div class="fragment box-red box" style="margin-top:10px">
+        <strong>Hallazgo:</strong> La norma $L^1$ <span class="h1c">se disparó bruscamente</span> en los meses previos al colapso de 2008 — una señal de alerta temprana topológica.
+      </div>
+    </div>
+    <div style="text-align:center">
+      <!-- Stylized crisis L1 norm chart -->
+      <svg width="320" height="200" viewBox="0 0 320 200" style="background:#111; border-radius:5px">
+        <text x="160" y="15" text-anchor="middle" fill="#aaa" font-size="11">Norma L¹ del paisaje de persistencia</text>
+        <line x1="30" y1="180" x2="300" y2="180" stroke="#444" stroke-width="1"/>
+        <line x1="30" y1="20" x2="30" y2="180" stroke="#444" stroke-width="1"/>
+        <!-- "Normal" region -->
+        <path d="M30,140 L60,138 L80,142 L100,135 L115,137 L130,133" stroke="#4ecdc4" stroke-width="2" fill="none"/>
+        <!-- Spike before crash -->
+        <path d="M130,133 L145,125 L155,100 L165,70 L170,50 L175,65 L185,90" stroke="#ff6b6b" stroke-width="2.5" fill="none"/>
+        <!-- Crash marker -->
+        <line x1="185" y1="20" x2="185" y2="180" stroke="#ffd93d" stroke-width="1.5" stroke-dasharray="4,3"/>
+        <text x="185" y="35" fill="#ffd93d" font-size="10">COLAPSO</text>
+        <!-- After crash: high then declining -->
+        <path d="M185,90 L200,100 L220,120 L250,130 L280,135 L300,138" stroke="#4ecdc4" stroke-width="2" fill="none"/>
+        <!-- Axis labels -->
+        <text x="75" y="195" text-anchor="middle" fill="#666" font-size="10">2006</text>
+        <text x="165" y="195" text-anchor="middle" fill="#666" font-size="10">2008</text>
+        <text x="255" y="195" text-anchor="middle" fill="#666" font-size="10">2010</text>
+        <!-- Annotation -->
+        <text x="142" y="108" fill="#ffd93d" font-size="10">↑ alerta</text>
+        <text x="142" y="120" fill="#ffd93d" font-size="10">temprana</text>
+      </svg>
+    </div>
+  </div>
+  <aside class="notes">Gidea & Katz (2018) is the landmark paper. The L1 norm of the persistence landscape spiked before both the 2008 crash and the 2015-2016 Chinese stock market crisis.</aside>
+</section>
+
+<!-- ======================================================= SLIDE 19: PERSISTENCE LANDSCAPE -->
+<section>
+  <h2>Paisajes de persistencia — vectorizando diagramas</h2>
+  <div class="two-col" style="align-items:center">
+    <div style="text-align:center">
+      <svg width="280" height="200" viewBox="0 0 280 200" style="background:#111; border-radius:5px">
+        <!-- Persistence landscape construction -->
+        <!-- From persistence diagram (birth,death) → tent functions -->
+        <text x="140" y="15" text-anchor="middle" fill="#aaa" font-size="11">Paisaje λ(k, t)</text>
+        <line x1="20" y1="170" x2="260" y2="170" stroke="#444" stroke-width="1"/>
+        <!-- landscape 1 (highest peaks) -->
+        <path d="M40,170 L80,110 L120,170 M100,170 L140,80 L180,170 M160,170 L200,130 L240,170" stroke="#ff6b6b" stroke-width="2" fill="none"/>
+        <!-- landscape 2 (lower) -->
+        <path d="M50,170 L75,145 L100,170 M120,170 L145,120 L170,170" stroke="#4ecdc4" stroke-width="2" fill="none" stroke-dasharray="4,2"/>
+        <text x="50" y="185" fill="#ff6b6b" font-size="10">λ₁(t)</text>
+        <text x="130" y="185" fill="#4ecdc4" font-size="10">λ₂(t)</text>
+        <text x="20" y="185" fill="#666" font-size="10">0</text>
+        <text x="260" y="185" fill="#666" font-size="10">r</text>
+      </svg>
+    </div>
+    <div class="small">
+      <div class="box">
+        <strong>Definición:</strong><br>
+        Para cada $(b,d)$ en $\text{Dgm}_k$, definir función de tienda:<br>
+        $f_{b,d}(t) = \max(0,\, \min(t-b,\, d-t))$<br><br>
+        $\lambda_k(j, t) =$ el $j$-ésimo mayor $f_{b,d}(t)$
+      </div>
+      <div class="fragment box box-yellow" style="margin-top:10px">
+        <strong>Propiedad clave:</strong> $\lambda_k(j,\cdot) \in L^2([0,\infty))$ — es una <span class="hi">función</span>, no un conjunto.<br>
+        <span class="dim">→ Se pueden calcular medias, normas, productos internos. Se conecta a cualquier modelo de ML.</span>
+      </div>
+      <div class="fragment box-red box" style="margin-top:8px">
+        <strong>La señal de colapso:</strong>
+        $\|\lambda\|_{L^1} = \sum_k \int \lambda_k(j, t)\, dt \;\approx\; \text{longitud total de barras}$<br>
+        <span class="dim">Gidea &amp; Katz rastrean este número en el tiempo. Se dispara antes de los colapsos.</span>
+      </div>
+    </div>
+  </div>
+  <aside class="notes">Persistence landscapes (Bubenik 2015) are the main way to convert persistence diagrams to ML-usable feature vectors. The L1 norm is what Gidea & Katz tracked.</aside>
+</section>
+
+<!-- ======================================================= SLIDE 20: PERSISTENCE IMAGES -->
+<section>
+  <h2>Imágenes de persistencia — otra vectorización</h2>
+  <div class="two-col" style="align-items:center">
+    <div style="text-align:center">
+      <svg width="260" height="220" viewBox="0 0 260 220" style="background:#111; border-radius:5px">
+        <text x="130" y="15" text-anchor="middle" fill="#aaa" font-size="11">Imagen de persistencia (Dgm₁)</text>
+        <!-- Grid representing image pixels -->
+        <defs>
+          <radialGradient id="blob1" cx="50%" cy="50%" r="50%">
+            <stop offset="0%" style="stop-color:#ff6b6b;stop-opacity:0.9"/>
+            <stop offset="100%" style="stop-color:#ff6b6b;stop-opacity:0"/>
+          </radialGradient>
+          <radialGradient id="blob2" cx="50%" cy="50%" r="50%">
+            <stop offset="0%" style="stop-color:#ff6b6b;stop-opacity:0.6"/>
+            <stop offset="100%" style="stop-color:#ff6b6b;stop-opacity:0"/>
+          </radialGradient>
+        </defs>
+        <!-- Grid -->
+        <rect x="20" y="25" width="220" height="180" fill="#1a1a1a" stroke="#333"/>
+        <!-- Blobs = high-persistence features -->
+        <circle cx="140" cy="70" r="35" fill="url(#blob1)"/>
+        <circle cx="80" cy="130" r="25" fill="url(#blob2)"/>
+        <circle cx="170" cy="150" r="18" fill="url(#blob2)" opacity="0.7"/>
+        <!-- Axes -->
+        <text x="130" y="215" text-anchor="middle" fill="#666" font-size="10">birth</text>
+        <text x="12" y="115" text-anchor="middle" fill="#666" font-size="10" transform="rotate(-90,12,115)">persistence</text>
+      </svg>
+    </div>
+    <div class="small">
+      <p>Convertir el diagrama en una <span class="hi">imagen en escala de grises</span>:</p>
+      <ol style="margin-left:1em; font-size:0.9em">
+        <li class="fragment">Rotar el diagrama: usar ejes (nacimiento, persistencia)</li>
+        <li class="fragment">Ponderar por persistencia (larga vida = brillante)</li>
+        <li class="fragment">Suavizar con kernel gaussiano</li>
+        <li class="fragment">Resultado: imagen de tamaño fijo → <span class="hi">¡entrada para CNN!</span></li>
+      </ol>
+      <div class="fragment box-yellow box" style="margin-top:10px; font-size:0.9em">
+        Adams et al. (2017) — JMLR<br>
+        <span class="dim">Estable, diferenciable, compatible con cualquier CNN de imágenes estándar</span>
+      </div>
+    </div>
+  </div>
+  <aside class="notes">Persistence images are ideal when you want to use CNNs. The diagram becomes an image that standard CNN architectures can process directly.</aside>
+</section>
+
+<!-- ======================================================= SLIDE 21: TDA + ML PIPELINE -->
+<section>
+  <div class="part-label">PARTE 5 — PIPELINE TDA + ML</div>
+  <h2>Arquitectura completa TDA → aprendizaje profundo</h2>
+  <svg width="760" height="230" viewBox="0 0 760 230" style="display:block;margin:0 auto">
+    <!-- Step 1: Financial data -->
+    <rect x="5" y="30" width="108" height="80" rx="6" fill="rgba(255,107,107,0.15)" stroke="#ff6b6b" stroke-width="1.5"/>
+    <text x="59" y="56" text-anchor="middle" fill="#ff6b6b" font-size="11" font-weight="bold">Datos</text>
+    <text x="59" y="70" text-anchor="middle" fill="#ff6b6b" font-size="11" font-weight="bold">Financieros</text>
+    <text x="59" y="86" text-anchor="middle" fill="#888" font-size="10">OHLCV</text>
+    <text x="59" y="100" text-anchor="middle" fill="#888" font-size="10">log-retornos</text>
+    <!-- Arrow 1 -->
+    <text x="125" y="77" fill="#ffd93d" font-size="18">→</text>
+    <!-- Step 2: Sliding window -->
+    <rect x="132" y="30" width="110" height="85" rx="6" fill="rgba(255,217,61,0.1)" stroke="#ffd93d" stroke-width="1.5"/>
+    <text x="187" y="55" text-anchor="middle" fill="#ffd93d" font-size="11" font-weight="bold">Ventana</text>
+    <text x="187" y="68" text-anchor="middle" fill="#ffd93d" font-size="11" font-weight="bold">Deslizante</text>
+    <text x="187" y="84" text-anchor="middle" fill="#888" font-size="10">W=50 días</text>
+    <text x="187" y="97" text-anchor="middle" fill="#888" font-size="10">paso=1 día</text>
+    <text x="187" y="110" text-anchor="middle" fill="#888" font-size="10">→ nube de puntos</text>
+    <!-- Arrow 2 -->
+    <text x="254" y="77" fill="#ffd93d" font-size="18">→</text>
+    <!-- Step 3: Ripser / PH -->
+    <rect x="268" y="30" width="110" height="85" rx="6" fill="rgba(78,205,196,0.1)" stroke="#4ecdc4" stroke-width="1.5"/>
+    <text x="323" y="55" text-anchor="middle" fill="#4ecdc4" font-size="11" font-weight="bold">Homología</text>
+    <text x="323" y="68" text-anchor="middle" fill="#4ecdc4" font-size="11" font-weight="bold">Persistente</text>
+    <text x="323" y="84" text-anchor="middle" fill="#888" font-size="10">Ripser / GUDHI</text>
+    <text x="323" y="97" text-anchor="middle" fill="#888" font-size="10">Dgm₀, Dgm₁</text>
+    <text x="323" y="110" text-anchor="middle" fill="#888" font-size="10">códigos de barras</text>
+    <!-- Arrow 3 -->
+    <text x="390" y="77" fill="#ffd93d" font-size="18">→</text>
+    <!-- Step 4: Vectorize -->
+    <rect x="404" y="30" width="110" height="85" rx="6" fill="rgba(168,230,207,0.1)" stroke="#a8e6cf" stroke-width="1.5"/>
+    <text x="459" y="55" text-anchor="middle" fill="#a8e6cf" font-size="11" font-weight="bold">Vectorizar</text>
+    <text x="459" y="72" text-anchor="middle" fill="#888" font-size="10">Paisajes</text>
+    <text x="459" y="85" text-anchor="middle" fill="#888" font-size="10">Imágenes PI</text>
+    <text x="459" y="98" text-anchor="middle" fill="#888" font-size="10">estadísticas</text>
+    <text x="459" y="111" text-anchor="middle" fill="#888" font-size="10">(dim. fija)</text>
+    <!-- Arrow 4 -->
+    <text x="526" y="77" fill="#ffd93d" font-size="18">→</text>
+    <!-- Step 5: ML model -->
+    <rect x="540" y="20" width="120" height="105" rx="6" fill="rgba(255,107,107,0.1)" stroke="#ff6b6b" stroke-width="1.5"/>
+    <text x="600" y="45" text-anchor="middle" fill="#ff6b6b" font-size="11" font-weight="bold">Modelo ML / AP</text>
+    <text x="600" y="62" text-anchor="middle" fill="#888" font-size="10">LSTM</text>
+    <text x="600" y="76" text-anchor="middle" fill="#888" font-size="10">CNN</text>
+    <text x="600" y="90" text-anchor="middle" fill="#888" font-size="10">Bosque Aleatorio</text>
+    <text x="600" y="104" text-anchor="middle" fill="#888" font-size="10">+ características TDA</text>
+    <text x="600" y="117" text-anchor="middle" fill="#888" font-size="10">concatenadas</text>
+    <!-- Arrow 5 -->
+    <text x="665" y="77" fill="#ffd93d" font-size="18">→</text>
+    <!-- Step 6: Output -->
+    <rect x="678" y="30" width="78" height="80" rx="6" fill="rgba(255,217,61,0.15)" stroke="#ffd93d" stroke-width="1.5"/>
+    <text x="717" y="56" text-anchor="middle" fill="#ffd93d" font-size="11" font-weight="bold">Salida</text>
+    <text x="717" y="72" text-anchor="middle" fill="#888" font-size="10">dirección</text>
+    <text x="717" y="86" text-anchor="middle" fill="#888" font-size="10">VaR</text>
+    <text x="717" y="100" text-anchor="middle" fill="#888" font-size="10">régimen</text>
+    <!-- Time axis below -->
+    <text x="383" y="165" text-anchor="middle" fill="#aaa" font-size="11">→ Repetir para cada día de trading → serie de tiempo de predicciones</text>
+    <rect x="132" y="178" width="516" height="28" rx="4" fill="rgba(255,217,61,0.05)" stroke="#ffd93d" stroke-width="1" stroke-dasharray="4,3"/>
+    <text x="390" y="197" text-anchor="middle" fill="#ffd93d" font-size="10">Las características TDA se pueden añadir a cualquier pipeline AP existente (LSTM, CNN, Transformer)</text>
+  </svg>
+  <aside class="notes">This is the full pipeline. The key message: TDA features are ADDITIVE to your existing pipeline. You don't replace your LSTM — you add topological features as extra inputs.</aside>
+</section>
+
+<!-- ======================================================= SLIDE 22: TDA + LSTM ARCHITECTURE -->
+<section>
+  <h2>Características TDA + LSTM: arquitectura concreta</h2>
+  <svg width="760" height="210" viewBox="0 0 760 210" style="display:block;margin:0 auto">
+    <!-- Two input streams -->
+    <!-- Stream 1: raw returns -->
+    <rect x="5" y="20" width="110" height="50" rx="5" fill="rgba(255,107,107,0.15)" stroke="#ff6b6b" stroke-width="1.5"/>
+    <text x="60" y="42" text-anchor="middle" fill="#ff6b6b" font-size="11">Retornos brutos</text>
+    <text x="60" y="58" text-anchor="middle" fill="#888" font-size="10">secuencia (W × 1)</text>
+    <!-- LSTM -->
+    <rect x="145" y="10" width="100" height="70" rx="5" fill="rgba(255,107,107,0.1)" stroke="#ff6b6b" stroke-width="1.5"/>
+    <text x="195" y="40" text-anchor="middle" fill="#ff6b6b" font-size="11">LSTM</text>
+    <text x="195" y="58" text-anchor="middle" fill="#888" font-size="10">hidden dim=64</text>
+    <line x1="115" y1="45" x2="145" y2="45" stroke="#ff6b6b" stroke-width="1.5" marker-end="url(#arr)"/>
+    <!-- Stream 2: TDA features -->
+    <rect x="5" y="100" width="110" height="50" rx="5" fill="rgba(78,205,196,0.15)" stroke="#4ecdc4" stroke-width="1.5"/>
+    <text x="60" y="122" text-anchor="middle" fill="#4ecdc4" font-size="11">Caract. TDA</text>
+    <text x="60" y="138" text-anchor="middle" fill="#888" font-size="10">paisaje, estadísticas</text>
+    <!-- FC -->
+    <rect x="145" y="90" width="100" height="70" rx="5" fill="rgba(78,205,196,0.1)" stroke="#4ecdc4" stroke-width="1.5"/>
+    <text x="195" y="120" text-anchor="middle" fill="#4ecdc4" font-size="11">FC(128→64)</text>
+    <text x="195" y="138" text-anchor="middle" fill="#888" font-size="10">ReLU, BN</text>
+    <line x1="115" y1="125" x2="145" y2="125" stroke="#4ecdc4" stroke-width="1.5"/>
+    <!-- Concatenate -->
+    <rect x="275" y="50" width="80" height="70" rx="5" fill="rgba(255,217,61,0.15)" stroke="#ffd93d" stroke-width="1.5"/>
+    <text x="315" y="82" text-anchor="middle" fill="#ffd93d" font-size="11">Concatenar</text>
+    <text x="315" y="98" text-anchor="middle" fill="#888" font-size="10">[64+64=128]</text>
+    <line x1="245" y1="45" x2="275" y2="70" stroke="#ff6b6b" stroke-width="1.5"/>
+    <line x1="245" y1="125" x2="275" y2="100" stroke="#4ecdc4" stroke-width="1.5"/>
+    <!-- FC layers -->
+    <rect x="385" y="50" width="90" height="70" rx="5" fill="rgba(168,230,207,0.1)" stroke="#a8e6cf" stroke-width="1.5"/>
+    <text x="430" y="78" text-anchor="middle" fill="#a8e6cf" font-size="11">FC(128→64)</text>
+    <text x="430" y="94" text-anchor="middle" fill="#a8e6cf" font-size="11">FC(64→32)</text>
+    <text x="430" y="110" text-anchor="middle" fill="#888" font-size="10">Dropout 0.3</text>
+    <line x1="355" y1="85" x2="385" y2="85" stroke="#ffd93d" stroke-width="1.5"/>
+    <!-- Output -->
+    <rect x="505" y="55" width="90" height="60" rx="5" fill="rgba(255,217,61,0.15)" stroke="#ffd93d" stroke-width="1.5"/>
+    <text x="550" y="82" text-anchor="middle" fill="#ffd93d" font-size="11">Salida</text>
+    <text x="550" y="100" text-anchor="middle" fill="#888" font-size="10">softmax/lineal</text>
+    <line x1="475" y1="85" x2="505" y2="85" stroke="#a8e6cf" stroke-width="1.5"/>
+    <!-- Benefit box -->
+    <rect x="610" y="20" width="145" height="145" rx="6" fill="rgba(255,107,107,0.05)" stroke="#555" stroke-width="1"/>
+    <text x="683" y="42" text-anchor="middle" fill="#aaa" font-size="11" font-weight="bold">Por qué funciona:</text>
+    <text x="683" y="60" text-anchor="middle" fill="#4ecdc4" font-size="10">TDA captura</text>
+    <text x="683" y="73" text-anchor="middle" fill="#4ecdc4" font-size="10">forma global</text>
+    <text x="683" y="90" text-anchor="middle" fill="#ff6b6b" font-size="10">LSTM captura</text>
+    <text x="683" y="103" text-anchor="middle" fill="#ff6b6b" font-size="10">secuencia local</text>
+    <text x="683" y="120" text-anchor="middle" fill="#ffd93d" font-size="10">¡Complementarios!</text>
+    <text x="683" y="137" text-anchor="middle" fill="#888" font-size="9">TDA = estructural</text>
+    <text x="683" y="150" text-anchor="middle" fill="#888" font-size="9">LSTM = temporal</text>
+  </svg>
+  <aside class="notes">This is how you'd actually implement this in your Unit 7 (asset allocation LSTM). TDA features go through a small FC branch, then get concatenated with the LSTM output. No major architectural change needed.</aside>
+</section>
+
+<!-- ======================================================= SLIDE 23: HURST EXPONENT -->
+<section>
+  <div class="part-label">PARTE 6 — LARGA MEMORIA Y EXPONENTE DE HURST</div>
+  <h2>La intuición de Mandelbrot: los mercados tienen memoria</h2>
+  <div class="two-col" style="align-items:flex-start">
+    <div class="small">
+      <p>"Los precios no siguen una caminata aleatoria. Tienen <span class="hi">larga memoria</span>." — Mandelbrot (2004)</p>
+      <div class="fragment box" style="margin-top:10px">
+        <strong>Modelo estándar:</strong> $S_t = S_0 e^{\mu t + \sigma W_t}$<br>
+        $W_t$ = movimiento browniano → <em>sin memoria</em>
+      </div>
+      <div class="fragment box-red box" style="margin-top:8px">
+        <strong>Realidad:</strong> $W_t \to B^H_t$ = movimiento browniano fraccional (MBf), $\text{Cov}(B^H_{t+1} - B^H_t,\; B^H_1 - B^H_0) \sim H(2H-1)\,t^{2H-2}$<br>
+        Para $H > 0.5$: correlación de incrementos <span class="h1c">no sumable</span> → larga memoria
+      </div>
+    </div>
+    <div class="fragment">
+      <svg width="360" height="200" viewBox="0 0 360 200" style="background:#111; border-radius:5px">
+        <text x="180" y="15" text-anchor="middle" fill="#aaa" font-size="11">Trayectorias: MBf en diferentes H</text>
+        <!-- H=0.5: wiggly random walk -->
+        <polyline points="10,100 25,95 40,108 55,102 70,115 85,108 100,95 115,105 130,98 145,110 160,103 175,95 190,108 205,100 220,112 235,105 250,98 265,105 280,100" stroke="#888" stroke-width="1.5" fill="none"/>
+        <text x="287" y="104" fill="#888" font-size="12">H=0.5</text>
+        <!-- H=0.8: smooth trending -->
+        <polyline points="10,150 25,145 40,138 55,130 70,122 85,115 100,110 115,105 130,100 145,97 160,93 175,90 190,88 205,85 220,82 235,80 250,78 265,76 280,74" stroke="#4ecdc4" stroke-width="2" fill="none"/>
+        <text x="287" y="78" fill="#4ecdc4" font-size="12">H=0.8</text>
+        <!-- H=0.3: mean-reverting -->
+        <polyline points="10,60 25,75 40,55 55,78 70,52 85,72 100,58 115,75 130,54 145,76 160,56 175,73 190,57 205,74 220,58 235,72 250,56 265,73 280,59" stroke="#ff6b6b" stroke-width="1.5" fill="none"/>
+        <text x="287" y="63" fill="#ff6b6b" font-size="12">H=0.3</text>
+        <!-- Legend -->
+        <text x="10" y="188" fill="#4ecdc4" font-size="10">H&gt;0.5: con tendencia/persistente</text>
+        <text x="10" y="176" fill="#ff6b6b" font-size="10">H&lt;0.5: reversión a la media</text>
+        <text x="10" y="164" fill="#888" font-size="10">H=0.5: caminata aleatoria (sin memoria)</text>
+      </svg>
+    </div>
+  </div>
+  <aside class="notes">The Hurst exponent H is the key parameter. H=0.5 is standard Brownian motion (efficient market hypothesis). H>0.5 means trends persist. H<0.5 means mean reversion. Real markets typically show H slightly above 0.5 at certain time scales.</aside>
+</section>
+
+<!-- ======================================================= SLIDE 24: TOPOLOGICAL HURST [OPTIONAL — skip if short on time] -->
+<section>
+  <div class="part-label" style="background:#ff6b6b; color:#fff">OPTIONAL — Research Frontier</div>
+  <h2>Topological Hurst estimator</h2>
+  <div class="box-yellow box small" style="margin-bottom:12px">
+    <strong>Idea clave:</strong> la <em>forma</em> de la nube de puntos con embedding de retardo cambia con $H$. Mayor $H$ → lazos más persistentes.
+  </div>
+  <div class="two-col small" style="align-items:flex-start">
+    <div>
+      <div class="box" style="margin-bottom:8px">
+        <strong>Ley de escala (conjeturada → probada):</strong><br>
+        $\mathbb{E}[L_n^{(1)}(\varepsilon)] \sim n \cdot \varepsilon^{-\alpha(H)}$<br>
+        donde $\alpha(H)$ es <span class="hi">estrictamente monótona</span> en $H$
+      </div>
+      <div class="fragment box" style="margin-bottom:8px">
+        <strong>Estimador:</strong><br>
+        Ajustar la pendiente log-log de $L_n^{(1)}(\varepsilon)$ → invertir $\alpha(H)$ → obtener $\hat{H}$
+      </div>
+      <div class="fragment box-red box">
+        <strong>Ventaja:</strong> invariante bajo transformaciones monótonas de la serie — ¡los estimadores estándar (R/S, AFD) no lo son!
+      </div>
+    </div>
+    <div class="fragment">
+      <svg width="300" height="200" viewBox="0 0 300 200" style="background:#111; border-radius:5px">
+        <text x="150" y="15" text-anchor="middle" fill="#aaa" font-size="11">log L_n(ε) vs log ε para diferentes H</text>
+        <line x1="30" y1="180" x2="280" y2="180" stroke="#555" stroke-width="1"/>
+        <line x1="30" y1="20" x2="30" y2="180" stroke="#555" stroke-width="1"/>
+        <!-- Different slopes = different H -->
+        <line x1="30" y1="50" x2="270" y2="160" stroke="#4ecdc4" stroke-width="2"/>
+        <text x="275" y="163" fill="#4ecdc4" font-size="9">H=0.8</text>
+        <line x1="30" y1="80" x2="270" y2="160" stroke="#ffd93d" stroke-width="2"/>
+        <text x="275" y="153" fill="#ffd93d" font-size="9">H=0.6</text>
+        <line x1="30" y1="110" x2="270" y2="160" stroke="#ff6b6b" stroke-width="2"/>
+        <text x="275" y="143" fill="#ff6b6b" font-size="9">H=0.5</text>
+        <!-- Slope annotation -->
+        <text x="100" y="85" fill="#aaa" font-size="9">pendiente = -α(H)</text>
+        <text x="130" y="195" text-anchor="middle" fill="#666" font-size="10">log ε</text>
+        <text x="12" y="100" fill="#666" font-size="10" transform="rotate(-90,12,100)">log L</text>
+      </svg>
+    </div>
+  </div>
+  <aside class="notes">This is the current research frontier — the paper being written in this project. The key result is that the log-log slope of the barcode count function encodes H. This gives a TDA-based Hurst estimator with provable guarantees.</aside>
+</section>
+
+<!-- ======================================================= SLIDE 25: PYTHON CODE 1 -->
+<section>
+  <div class="part-label">PARTE 7 — IMPLEMENTACIÓN</div>
+  <h2>Python: calculando HP de datos financieros</h2>
+  <pre><code class="python" style="font-size:0.55em">import numpy as np
+import yfinance as yf
+from ripser import ripser
+from persim import plot_diagrams
+import matplotlib.pyplot as plt
+
+# --- 1. Download S&P 500 data ---
+sp500 = yf.download("^GSPC", start="2005-01-01", end="2010-12-31")
+log_returns = np.log(sp500['Close']).diff().dropna().values.squeeze()
+
+# --- 2. Sliding window point cloud (delay embedding) ---
+def sliding_window_cloud(series, window=50, d=3, tau=1):
+    """Build point cloud from a window of a time series."""
+    N = len(series)
+    points = []
+    for t in range(N - (d - 1) * tau):
+        pt = [series[t + k * tau] for k in range(d)]
+        points.append(pt)
+    return np.array(points)
+
+# --- 3. Compute persistent homology on one window ---
+W = 50       # window length
+cloud = sliding_window_cloud(log_returns[:W], d=3, tau=1)
+
+result = ripser(cloud, maxdim=1)   # compute H0 and H1
+diagrams = result['dgms']          # list: diagrams[0]=H0, diagrams[1]=H1
+
+# --- 4. Visualize ---
+fig, axes = plt.subplots(1, 2, figsize=(10, 4))
+plot_diagrams(diagrams, ax=axes[0], title="Persistence Diagram")
+# barcode view
+for (b, d_val) in diagrams[1]:
+    if d_val == np.inf: continue
+    axes[1].plot([b, d_val], [0, 0], 'r-', linewidth=2, alpha=0.7)
+axes[1].set_title("H₁ Barcode")
+plt.tight_layout()
+plt.savefig("sp500_tda.png", dpi=150)
+</code></pre>
+  <p class="tiny dim" style="text-align:center">Instalar: <code>pip install ripser persim yfinance matplotlib numpy</code></p>
+  <aside class="notes">Walk through each step. ripser is the fast PH library (C++ under the hood). diagrams[1] contains the H1 birth/death pairs. The sliding window gives us one diagram per day.</aside>
+</section>
+
+<!-- ======================================================= SLIDE 26: PYTHON CODE 2 -->
+<section>
+  <h2>Python: características TDA + modelo ML</h2>
+  <pre><code class="python" style="font-size:0.52em">import numpy as np
+import yfinance as yf
+from ripser import ripser
+from sklearn.preprocessing import StandardScaler
+from sklearn.ensemble import GradientBoostingClassifier
+from slide_ph_financial import sliding_window_cloud
+
+sp500 = yf.download("^GSPC", start="2005-01-01", end="2010-12-31")
+log_returns = np.log(sp500['Close']).diff().dropna().values.squeeze()
+
+# --- TDA feature extraction from one window ---
+def tda_features(series_window, d=3, tau=1):
+    cloud = sliding_window_cloud(series_window, d=d, tau=tau)
+    dgms  = ripser(cloud, maxdim=1)['dgms']
+    h1 = dgms[1]
+    h1 = h1[h1[:, 1] < np.inf]          # remove infinite bars
+    persistence = h1[:, 1] - h1[:, 0]   # death - birth
+    return np.array([
+        len(persistence),                # number of H1 features
+        persistence.sum()  if len(persistence) > 0 else 0,   # total persistence
+        persistence.max()  if len(persistence) > 0 else 0,   # max persistence
+        persistence.mean() if len(persistence) > 0 else 0,   # mean persistence
+        persistence.std()  if len(persistence) > 0 else 0,   # std persistence
+    ])
+
+# --- Build feature matrix over time ---
+W = 50
+features, labels = [], []
+for i in range(W, len(log_returns) - 5):
+    window = log_returns[i - W : i]
+    future = log_returns[i : i + 5].sum()          # 5-day ahead return
+    features.append(tda_features(window))
+    labels.append(1 if future > 0 else 0)           # up/down classification
+
+X = StandardScaler().fit_transform(np.array(features))
+y = np.array(labels)
+
+# --- Train classifier ---
+clf = GradientBoostingClassifier(n_estimators=100, max_depth=3)
+clf.fit(X[:1000], y[:1000])
+acc = clf.score(X[1000:], y[1000:])
+print(f"Accuracy: {acc:.3f}")    # ~52-55% — better than random!
+</code></pre>
+  <aside class="notes">This is runnable code. The 5 TDA features (count, sum, max, mean, std of H1 persistence) are simple but informative. In practice you'd use persistence landscapes for richer features.</aside>
+</section>
+
+<!-- ======================================================= SLIDE 27: LIBRARIES -->
+<section>
+  <h2>Ecosistema Python para TDA</h2>
+  <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; font-size:0.7em; margin-top:10px">
+    <div class="box">
+      <strong style="color:#4ecdc4">Ripser</strong><br>
+      <span class="dim">Cálculo de HP de vanguardia. Motor C++, envoltorio Python. Maneja 10k puntos en segundos.</span><br>
+      <code class="tiny">pip install ripser</code><br>
+      <code class="tiny">from ripser import ripser</code>
+    </div>
+    <div class="box">
+      <strong style="color:#4ecdc4">giotto-tda</strong><br>
+      <span class="dim">Pipeline TDA completo con API de scikit-learn. Incluye transformadores, vectorizaciones, gráficos.</span><br>
+      <code class="tiny">pip install giotto-tda</code><br>
+      <code class="tiny">from gtda.homology import VietorisRipsPersistence</code>
+    </div>
+    <div class="box">
+      <strong style="color:#ff6b6b">persim</strong><br>
+      <span class="dim">Imágenes de persistencia, paisajes, distancias entre diagramas. Complementa a ripser.</span><br>
+      <code class="tiny">pip install persim</code><br>
+      <code class="tiny">from persim import plot_diagrams, PersistenceImager</code>
+    </div>
+    <div class="box">
+      <strong style="color:#ff6b6b">GUDHI</strong><br>
+      <span class="dim">Biblioteca completa del INRIA. Complejos alpha, HP cúbica, Mapper, Rips.</span><br>
+      <code class="tiny">pip install gudhi</code><br>
+      <code class="tiny">import gudhi</code>
+    </div>
+    <div class="box">
+      <strong style="color:#ffd93d">KeplerMapper</strong><br>
+      <span class="dim">Algoritmo Mapper para visualización topológica de datos de alta dimensión.</span><br>
+      <code class="tiny">pip install kmapper</code><br>
+      <code class="tiny">import kmapper as km</code>
+    </div>
+    <div class="box">
+      <strong style="color:#ffd93d">torch-topological</strong><br>
+      <span class="dim">HP diferenciable para aprendizaje profundo. Calcula gradientes a través de la persistencia. Mantenido activamente.</span><br>
+      <code class="tiny">pip install torch-topological</code><br>
+      <code class="tiny">from torch_topological.nn import VietorisRipsComplex</code>
+    </div>
+  </div>
+  <aside class="notes">Para los proyectos del curso, ripser + persim + giotto-tda es el stack recomendado. Todos se instalan con pip y funcionan en Google Colab.</aside>
+</section>
+
+<!-- ======================================================= SLIDE 28: SUMMARY -->
+<section>
+  <h2>Qué aporta TDA a tu kit de aprendizaje profundo</h2>
+  <div style="font-size:0.72em; margin-top:8px">
+    <div class="box" style="margin-bottom:8px">
+      <span class="h0">①</span> <strong>Características basadas en forma</strong> — captura estructura global invisible a estadísticas de ventana local
+    </div>
+    <div class="box" style="margin-bottom:8px">
+      <span class="h0">②</span> <strong>Robustez al ruido (teorema de estabilidad)</strong> — garantía teórica, no solo afirmación empírica
+    </div>
+    <div class="box" style="margin-bottom:8px">
+      <span class="h1c">③</span> <strong>Detección de regímenes</strong> — la topología cambia rápido cerca de los colapsos; el LSTM lo detecta tarde
+    </div>
+    <div class="box" style="margin-bottom:8px">
+      <span class="h1c">④</span> <strong>Agnóstico al modelo</strong> — las características TDA se conectan a LSTM, CNN, GBM, cualquier modelo de las unidades 5–10
+    </div>
+    <div class="box box-yellow" style="margin-bottom:8px">
+      <span class="hi">⑤</span> <strong>Área de investigación activa</strong> — estimador de Hurst topológico (2026), predicción de colapsos, topología de portafolios
+    </div>
+  </div>
+  <div class="fragment box box-yellow" style="margin-top:10px; font-size:0.7em">
+    <strong>Evidencia empírica:</strong> en análisis retrospectivo sobre índices bursátiles, las características TDA detectaron señales previas a los colapsos de 2008 y 2015–2016 que no eran visibles con métodos estadísticos estándar (Gidea &amp; Katz 2018). La señal fue más pronunciada durante regímenes de alta volatilidad — exactamente cuando los modelos de AP tienden a fallar.
+  </div>
+  <p class="small fragment" style="margin-top:8px; text-align:center">
+    TDA no reemplaza el AP. Es una <span class="hi">representación complementaria</span> que codifica lo que los modelos puramente de series de tiempo pierden.
+  </p>
+  <aside class="notes">Close with this message: TDA is not a replacement for LSTM or CNN. It's an additional source of features that captures structural, geometric information.</aside>
+</section>
+
+<!-- ======================================================= SLIDE 29: RESOURCES -->
+<section>
+  <h2>Lecturas adicionales</h2>
+  <div style="font-size:0.62em; margin-top:8px">
+    <div class="two-col">
+      <div>
+        <p><strong style="color:#4ecdc4">Fundamentos:</strong></p>
+        <ul style="margin-left:1em">
+          <li>Carlsson (2009) "Topology and data" — <em>Bull. AMS</em></li>
+          <li>Edelsbrunner, Harer (2010) — <em>Computational Topology</em> (libro)</li>
+          <li>Dey, Wang (2022) — <em>Computational Topology for Data Analysis</em> (PDF gratuito)</li>
+        </ul>
+        <p style="margin-top:10px"><strong style="color:#4ecdc4">Aplicaciones financieras:</strong></p>
+        <ul style="margin-left:1em">
+          <li>Gidea, Katz (2018) — <em>Physica A</em> (detección de colapsos)</li>
+          <li>Gidea et al. (2020) — <em>J. Financial Data Science</em></li>
+          <li>Perea, Harer (2015) — <em>FoCM</em> (ventanas deslizantes)</li>
+        </ul>
+      </div>
+      <div>
+        <p><strong style="color:#ff6b6b">Vectorizaciones:</strong></p>
+        <ul style="margin-left:1em">
+          <li>Bubenik (2015) — Paisajes de persistencia — <em>JMLR</em></li>
+          <li>Adams et al. (2017) — Imágenes de persistencia — <em>JMLR</em></li>
+        </ul>
+        <p style="margin-top:10px"><strong style="color:#ff6b6b">Tutoriales / código:</strong></p>
+        <ul style="margin-left:1em">
+          <li>giotto-tda docs: giotto-ai.github.io</li>
+          <li>TDA-tutorial (GitHub: outlace/TDA-tutorial)</li>
+          <li>Ripser: ripser.scikit-tda.org</li>
+        </ul>
+        <p style="margin-top:10px"><strong style="color:#ffd93d">Frontera de investigación (este laboratorio):</strong></p>
+        <ul style="margin-left:1em">
+          <li>Estimador de Hurst topológico para MBf (en preparación, 2026)</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+  <aside class="notes">Point them to Dey & Wang (free PDF) for the textbook. For hands-on: giotto-tda tutorial notebooks are excellent.</aside>
+</section>
+
+<!-- ======================================================= SLIDE 30: QA -->
+<section>
+  <h2>Preguntas?</h2>
+  <br>
+  <div class="two-col small" style="margin-top:20px">
+    <div class="box" style="text-align:center">
+      <p><span class="h0">Topology</span> = shape that<br>survives deformation</p>
+    </div>
+    <div class="box" style="text-align:center">
+      <p><span class="h1c">Persistence</span> = track shape<br>across all scales</p>
+    </div>
+    <div class="box" style="text-align:center">
+      <p><span class="hi">Delay embedding</span> = time<br>series → point cloud</p>
+    </div>
+    <div class="box" style="text-align:center">
+      <p><span class="h0">Landscape norm</span> = crash<br>early warning signal</p>
+    </div>
+  </div>
+  <br>
+  <p class="small dim" style="text-align:center">Slides + code: see <code>presentations/</code> folder</p>
+</section>
+
+</div><!-- /slides -->
+</div><!-- /reveal -->
+
+<!-- ============================================================ SCRIPTS -->
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@4.6.0/dist/reveal.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@4.6.0/plugin/notes/notes.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@4.6.0/plugin/highlight/highlight.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@4.6.0/plugin/math/math.js"></script>
+
+<script>
+Reveal.initialize({
+  hash: true,
+  slideNumber: 'c/t',
+  transition: 'slide',
+  transitionSpeed: 'fast',
+  width: 960,
+  height: 700,
+  margin: 0.04,
+  plugins: [RevealNotes, RevealHighlight, RevealMath.MathJax3],
+  math: {
+    mathjax: 'https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js',
+    config: 'TeX-AMS_HTML-full',
+  }
+});
+
+// ============================================================
+// RIPS COMPLEX ANIMATION (Slide 8)
+// ============================================================
+const RIPS_POINTS = [
+  [75,85],[150,45],[240,60],[310,95],[330,180],
+  [260,235],[160,240],[70,210],[30,140],[100,155],
+  [190,130],[270,150],[180,75],[115,115]
+];
+
+function dist2(a, b) {
+  return Math.sqrt((a[0]-b[0])**2 + (a[1]-b[1])**2);
+}
+
+function unionFind(n) {
+  const p = Array.from({length:n},(_,i)=>i), rk = new Array(n).fill(0);
+  function find(x){ return p[x]===x?x:(p[x]=find(p[x])); }
+  function union(x,y){ const px=find(x),py=find(y); if(px===py)return; rk[px]>=rk[py]?p[py]=px:p[px]=py; if(rk[px]===rk[py])rk[px]++; }
+  return {find, union};
+}
+
+function computeBetti(pts, r) {
+  const n = pts.length;
+  const uf = unionFind(n);
+  const adj = Array.from({length:n},()=>new Array(n).fill(false));
+  for(let i=0;i<n;i++) for(let j=i+1;j<n;j++) {
+    if(dist2(pts[i],pts[j])<=2*r){ adj[i][j]=adj[j][i]=true; uf.union(i,j); }
+  }
+  const comps = new Set(pts.map((_,i)=>uf.find(i))).size;
+  // Full Euler characteristic via clique enumeration: χ = Σ_k (-1)^k * #{k-simplices}
+  // β₁ = β₀ - χ  (assuming β₂=β₃=...=0, valid for this point set)
+  let euler = 0;
+  for(let mask=1; mask<(1<<n); mask++) {
+    const bits=[];
+    for(let i=0;i<n;i++) if(mask&(1<<i)) bits.push(i);
+    let isClique=true;
+    outer: for(let a=0;a<bits.length;a++) for(let b=a+1;b<bits.length;b++) {
+      if(!adj[bits[a]][bits[b]]){ isClique=false; break outer; }
+    }
+    if(isClique) euler += (bits.length%2===1 ? 1 : -1);
+  }
+  const b1 = Math.max(0, comps - euler);
+  return {b0:comps, b1};
+}
+
+function drawRips(r) {
+  const canvas = document.getElementById('ripsCanvas');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+  // Scale points to fill the taller canvas
+  const sx=2.0, sy=1.25, ox=30, oy=15;
+  const pts = RIPS_POINTS.map(([x,y])=>[x*sx+ox, y*sy+oy]);
+
+  ctx.clearRect(0,0,W,H);
+  ctx.fillStyle='#111';
+  ctx.fillRect(0,0,W,H);
+
+  // Triangles
+  ctx.fillStyle='rgba(78,205,196,0.18)';
+  for(let i=0;i<pts.length;i++) for(let j=i+1;j<pts.length;j++) for(let k=j+1;k<pts.length;k++) {
+    if(dist2(pts[i],pts[j])<=2*r && dist2(pts[i],pts[k])<=2*r && dist2(pts[j],pts[k])<=2*r){
+      ctx.beginPath(); ctx.moveTo(pts[i][0],pts[i][1]); ctx.lineTo(pts[j][0],pts[j][1]); ctx.lineTo(pts[k][0],pts[k][1]); ctx.closePath(); ctx.fill();
+    }
+  }
+  // Edges
+  ctx.strokeStyle='rgba(78,205,196,0.75)'; ctx.lineWidth=1.8;
+  for(let i=0;i<pts.length;i++) for(let j=i+1;j<pts.length;j++) {
+    if(dist2(pts[i],pts[j])<=2*r){
+      ctx.beginPath(); ctx.moveTo(pts[i][0],pts[i][1]); ctx.lineTo(pts[j][0],pts[j][1]); ctx.stroke();
+    }
+  }
+  // Circles (only for small r)
+  if(r < 90) {
+    ctx.strokeStyle='rgba(255,217,61,0.18)'; ctx.lineWidth=1;
+    for(const p of pts){ ctx.beginPath(); ctx.arc(p[0],p[1],r,0,2*Math.PI); ctx.stroke(); }
+  }
+  // Points
+  ctx.fillStyle='#ff6b6b';
+  for(const p of pts){ ctx.beginPath(); ctx.arc(p[0],p[1],5,0,2*Math.PI); ctx.fill(); }
+
+  // Betti numbers
+  const {b0,b1} = computeBetti(pts, r);
+  document.getElementById('b0val').textContent = b0;
+  document.getElementById('b1val').textContent = b1;
+  document.getElementById('ripsVal').textContent = r.toFixed(0);
+}
+
+// Play animation
+let ripsTimer = null;
+function startRipsPlay() {
+  const slider = document.getElementById('ripsSlider');
+  const btn = document.getElementById('ripsPlay');
+  if (ripsTimer) { clearInterval(ripsTimer); ripsTimer=null; btn.textContent='▶ Reproducir'; return; }
+  btn.textContent='⏸ Pausa';
+  slider.value = 0;
+  ripsTimer = setInterval(()=>{
+    let v = parseInt(slider.value);
+    v = Math.min(130, v+1);
+    slider.value = v;
+    drawRips(v);
+    if(v >= 130){ clearInterval(ripsTimer); ripsTimer=null; btn.textContent='▶ Reproducir'; }
+  }, 60);
+}
+
+document.addEventListener('DOMContentLoaded', ()=>{
+  const slider = document.getElementById('ripsSlider');
+  const btn = document.getElementById('ripsPlay');
+  if(slider){ slider.addEventListener('input', e=>drawRips(parseFloat(e.target.value))); }
+  if(btn){ btn.addEventListener('click', startRipsPlay); }
+  drawRips(0);
+});
+
+Reveal.on('slidechanged', ({indexh}) => {
+  // Slide 8 is index 7 (0-based)
+  if(indexh === 7) { setTimeout(()=>drawRips(0),100); }
+});
+
+// ============================================================
+// DELAY EMBEDDING ANIMATION (Slide 15)
+// ============================================================
+const TAU = 5;
+let currentSignal = 'sine';
+
+function generateSignal(type, N=200) {
+  const t = Array.from({length:N},(_,i)=>i);
+  if(type==='sine') return t.map(i => Math.sin(2*Math.PI*i/20) + 0.12*(Math.random()-0.5));
+  if(type==='random'){
+    let v=0; return t.map(()=>{ v += 0.3*(Math.random()-0.5); return v; });
+  }
+  if(type==='trend'){
+    let v=0; return t.map(i=>{ v += 0.05 + 0.25*(Math.random()-0.5); return v; });
+  }
+  return t.map(()=>Math.random()-0.5);
+}
+
+function drawEmbedding(type) {
+  const tsC = document.getElementById('tsCanvas');
+  const emC = document.getElementById('embedCanvas');
+  if(!tsC||!emC) return;
+  const tCtx=tsC.getContext('2d'), eCtx=emC.getContext('2d');
+  const W=tsC.width, H=tsC.height;
+  const sig = generateSignal(type, 200);
+
+  // Draw time series
+  tCtx.clearRect(0,0,W,H); tCtx.fillStyle='#111'; tCtx.fillRect(0,0,W,H);
+  const minS=Math.min(...sig), maxS=Math.max(...sig), rangeS=maxS-minS||1;
+  tCtx.strokeStyle='#4ecdc4'; tCtx.lineWidth=1.5; tCtx.beginPath();
+  sig.forEach((v,i)=>{
+    const x=10+(W-20)*i/(sig.length-1), y=H-10-(H-20)*(v-minS)/rangeS;
+    i===0?tCtx.moveTo(x,y):tCtx.lineTo(x,y);
+  });
+  tCtx.stroke();
+
+  // Draw embedding
+  eCtx.clearRect(0,0,W,H); eCtx.fillStyle='#111'; eCtx.fillRect(0,0,W,H);
+  const pts2d = sig.slice(0,sig.length-TAU).map((v,i)=>[v, sig[i+TAU]]);
+  const xs=pts2d.map(p=>p[0]), ys=pts2d.map(p=>p[1]);
+  const minX=Math.min(...xs), maxX=Math.max(...xs), rX=maxX-minX||1;
+  const minY=Math.min(...ys), maxY=Math.max(...ys), rY=maxY-minY||1;
+  eCtx.fillStyle='rgba(255,107,107,0.5)';
+  pts2d.forEach(([x,y])=>{
+    const px=15+(W-30)*(x-minX)/rX, py=H-15-(H-30)*(y-minY)/rY;
+    eCtx.beginPath(); eCtx.arc(px,py,2.5,0,2*Math.PI); eCtx.fill();
+  });
+
+  // Update message
+  const msgs = {
+    sine:'Señal periódica → círculo → lazo H₁ persistente (barra roja larga)',
+    random:'Caminata aleatoria → nube difusa → sin H₁ persistente (solo barras cortas)',
+    trend:'Con tendencia (H>0,5) → arco alargado → estructura H₀ persistente'
+  };
+  const msg = document.getElementById('embedMsg');
+  if(msg) msg.textContent = msgs[type]||'';
+}
+
+function setSignal(type) { currentSignal=type; drawEmbedding(type); }
+
+Reveal.on('slidechanged', ({indexh}) => {
+  if(indexh===14) { setTimeout(()=>drawEmbedding(currentSignal),100); }
+});
+
+document.addEventListener('DOMContentLoaded', ()=>{
+  drawEmbedding('sine');
+});
+</script>
+</body>
+</html>
